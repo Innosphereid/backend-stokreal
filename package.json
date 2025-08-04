@@ -1,7 +1,7 @@
 {
-  "name": "boilerplate-express-nodejs-typescript",
+  "name": "stokreal-backend",
   "version": "1.0.0",
-  "description": "A Node.js boilerplate with TypeScript, Express, PostgreSQL, and Knex",
+  "description": "Backend API untuk aplikasi StokReal - Manajemen Stok untuk Warung & Toko Kelontong. Fitur utama: pencarian produk cerdas, manajemen stok, notifikasi WhatsApp, dan import Excel.",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
@@ -22,12 +22,19 @@
     "test:coverage": "jest --coverage"
   },
   "keywords": [
+    "stokreal",
+    "inventory-management",
+    "warung",
+    "toko-kelontong",
+    "stock-management",
+    "indonesia",
     "nodejs",
     "typescript",
     "express",
     "postgresql",
     "knex",
-    "boilerplate"
+    "whatsapp-integration",
+    "excel-import"
   ],
   "author": "",
   "license": "MIT",
