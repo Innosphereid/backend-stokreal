@@ -3,6 +3,9 @@ import dotenv from 'dotenv';
 // Load environment variables first, before any other imports
 dotenv.config();
 
+// Register module aliases for runtime
+import 'module-alias/register';
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
