@@ -41,3 +41,9 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+
+# cursor related
+.cursor/
+.github/copilot-instructions.md
+.mcp.json
+CLAUDE.md
