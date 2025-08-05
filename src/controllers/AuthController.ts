@@ -23,7 +23,6 @@ export class AuthController {
     return (
       (req.headers['x-forwarded-for'] as string) ||
       (req.headers['x-real-ip'] as string) ||
-      req.connection.remoteAddress ||
       req.socket.remoteAddress ||
       req.ip ||
       'unknown'

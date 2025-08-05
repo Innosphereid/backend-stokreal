@@ -218,7 +218,7 @@ export class JWTUtils {
    */
   static getTokenExpiration(token: string): Date | null {
     const decoded = this.decodeToken(token);
-    if (!decoded || !decoded.exp) {
+    if (!decoded?.exp) {
       return null;
     }
 

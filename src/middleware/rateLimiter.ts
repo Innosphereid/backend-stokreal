@@ -18,8 +18,8 @@ interface RateLimitStore {
 }
 
 class RateLimiter {
-  private store: RateLimitStore = {};
-  private config: RateLimitConfig;
+  private readonly store: RateLimitStore = {};
+  private readonly config: RateLimitConfig;
 
   constructor(config: RateLimitConfig) {
     this.config = config;
@@ -33,7 +33,6 @@ class RateLimiter {
     const ip =
       req.headers['x-forwarded-for'] ||
       req.headers['x-real-ip'] ||
-      req.connection.remoteAddress ||
       req.socket.remoteAddress ||
       req.ip ||
       'unknown';
@@ -65,12 +64,10 @@ class RateLimiter {
       const now = Date.now();
 
       // Get or create client record
-      if (!this.store[clientId]) {
-        this.store[clientId] = {
-          count: 0,
-          resetTime: now + this.config.windowMs,
-        };
-      }
+      this.store[clientId] ??= {
+        count: 0,
+        resetTime: now + this.config.windowMs,
+      };
 
       const clientRecord = this.store[clientId];
 

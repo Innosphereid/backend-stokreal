@@ -138,10 +138,10 @@ export abstract class BaseModel<T extends DatabaseRecord> {
   /**
    * Apply search functionality (to be implemented by child classes)
    */
-  protected applySearch(query: Knex.QueryBuilder, search: string): Knex.QueryBuilder {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  protected applySearch(query: Knex.QueryBuilder, search?: string): Knex.QueryBuilder {
     // Default implementation - child classes should override this
     // search parameter is intentionally unused in default implementation
-    void search; // Suppress unused parameter warning
     return query;
   }
 

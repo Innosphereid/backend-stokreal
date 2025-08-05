@@ -1,4 +1,7 @@
-export interface ApiResponse<T = any> {
+export type SubscriptionPlan = 'free' | 'premium';
+export type SortOrder = 'asc' | 'desc';
+
+export interface ApiResponse<T = unknown> {
   message: string;
   data?: T;
   timestamp: string;
@@ -13,7 +16,7 @@ export interface PaginationMeta {
   hasPrev: boolean;
 }
 
-export interface PaginatedResponse<T = any> extends ApiResponse<T> {
+export interface PaginatedResponse<T = unknown> extends ApiResponse<T> {
   meta: PaginationMeta;
 }
 
@@ -29,7 +32,7 @@ export interface User extends DatabaseRecord {
   full_name: string;
   phone?: string | undefined;
   whatsapp_number?: string | undefined;
-  subscription_plan: 'free' | 'premium';
+  subscription_plan: SubscriptionPlan;
   subscription_expires_at?: Date | undefined;
   is_active: boolean;
   email_verified: boolean;
@@ -53,7 +56,7 @@ export interface UpdateUserRequest {
   password?: string;
   password_hash?: string; // Added for direct password hash updates
   last_login?: Date;
-  subscription_plan?: 'free' | 'premium';
+  subscription_plan?: SubscriptionPlan;
   subscription_expires_at?: Date;
   email_verified?: boolean;
 }
@@ -62,27 +65,6 @@ export interface QueryParams {
   page?: number;
   limit?: number;
   sort?: string;
-  order?: 'asc' | 'desc';
+  order?: SortOrder;
   search?: string;
-}
-
-export interface Post extends DatabaseRecord {
-  title: string;
-  content: string;
-  author_id: string; // Changed from number to string for UUID
-  status: 'draft' | 'published' | 'archived';
-  published_at?: Date;
-}
-
-export interface CreatePostRequest {
-  title: string;
-  content: string;
-  author_id: string; // Changed from number to string for UUID
-  status?: 'draft' | 'published' | 'archived';
-}
-
-export interface UpdatePostRequest {
-  title?: string;
-  content?: string;
-  status?: 'draft' | 'published' | 'archived';
 }

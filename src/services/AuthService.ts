@@ -598,7 +598,7 @@ export class AuthService implements AuthServiceInterface {
         subscription_plan: userWithPassword.subscription_plan,
         subscription_expires_at: userWithPassword.subscription_expires_at,
         is_active: userWithPassword.is_active,
-        email_verified: (userWithPassword as any).email_verified || false,
+        email_verified: userWithPassword.email_verified ?? false,
         created_at: userWithPassword.created_at,
         updated_at: userWithPassword.updated_at,
         ...(userWithPassword.last_login && { last_login: userWithPassword.last_login }),
