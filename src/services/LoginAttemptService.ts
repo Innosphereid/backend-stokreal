@@ -1,6 +1,5 @@
 import { db } from '@/config/database';
 import { logger } from '@/utils/logger';
-import { createError } from '@/utils/errors';
 
 export interface LoginAttempt {
   id: string;
