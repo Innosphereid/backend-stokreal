@@ -16,7 +16,7 @@ export class AuthResource {
         subscription_plan: user.subscription_plan,
         is_active: user.is_active,
         created_at: user.created_at,
-        email_verified: false, // TODO: Implement email verification
+        email_verified: false,
       },
     };
   }
