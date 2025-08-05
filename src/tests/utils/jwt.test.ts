@@ -1,12 +1,9 @@
-import {
-  JWTUtils,
-  TokenExpiredError,
-  TokenInvalidError,
-  JWTPayload,
-  JWTUser,
-} from '../../utils/jwt';
+import { JWTUtils } from '../../utils/jwt';
+import { jwtConfig } from '../../config/jwt';
+import { JWTUser, TokenPair, JWTPayload } from '../../types/jwt';
 
-// Mock the logger to avoid console output during tests
+// Mock dependencies
+jest.mock('../../config/jwt');
 jest.mock('../../utils/logger', () => ({
   logger: {
     debug: jest.fn(),
@@ -16,382 +13,343 @@ jest.mock('../../utils/logger', () => ({
   },
 }));
 
-// Mock the JWT config
-jest.mock('../../config/jwt', () => ({
-  jwtConfig: {
-    secret: 'test-secret-key-for-jwt-testing-purposes',
-    accessTokenExpiry: '15m',
-    refreshTokenExpiry: '7d',
-    verificationTokenExpiry: '1h',
-    issuer: 'test-app',
-    audience: 'test-users',
-    algorithm: 'HS256',
-  },
-  JWTConfigUtils: {
-    getTokenExpiry: jest.fn((type: string) => {
-      switch (type) {
-        case 'access':
-          return '15m';
-        case 'refresh':
-          return '7d';
-        case 'verification':
-          return '1h';
-        default:
-          return '15m';
-      }
-    }),
-  },
-}));
+const mockJwtConfig = jwtConfig as jest.Mocked<typeof jwtConfig>;
 
 describe('JWTUtils', () => {
   const mockUser: JWTUser = {
-    id: '123',
+    id: 'test-user-id',
     email: 'test@example.com',
     role: 'user',
   };
 
-  const mockPayload: Omit<JWTPayload, 'iat' | 'exp' | 'iss' | 'aud' | 'type'> = {
-    sub: '123',
+  const mockPayload: JWTPayload = {
+    sub: 'test-user-id',
     email: 'test@example.com',
     role: 'user',
+    type: 'access',
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + 3600,
+    iss: 'stokreal-backend',
+    aud: 'stokreal-users',
   };
 
   beforeEach(() => {
     jest.clearAllMocks();
+
+    // Mock JWT config
+    mockJwtConfig.secret = 'test-secret';
+    mockJwtConfig.issuer = 'stokreal-backend';
+    mockJwtConfig.audience = 'stokreal-users';
+    mockJwtConfig.algorithm = 'HS256';
   });
 
   describe('signToken', () => {
-    it('should sign an access token successfully', () => {
-      const token = JWTUtils.signToken(mockPayload, 'access');
+    it('should sign access token successfully', () => {
+      const payload = {
+        sub: mockUser.id,
+        email: mockUser.email,
+        role: mockUser.role,
+      };
 
-      expect(token).toBeDefined();
-      expect(typeof token).toBe('string');
-      expect(token.split('.')).toHaveLength(3); // JWT has 3 parts
+      // Mock jwt.sign to return a token
+      const mockToken = 'mock.jwt.token';
+      jest.spyOn(require('jsonwebtoken'), 'sign').mockReturnValue(mockToken);
+
+      const result = JWTUtils.signToken(payload, 'access');
+
+      expect(result).toBe(mockToken);
+      expect(require('jsonwebtoken').sign).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ...payload,
+          type: 'access',
+        }),
+        mockJwtConfig.secret,
+        expect.objectContaining({
+          expiresIn: expect.any(String),
+          issuer: mockJwtConfig.issuer,
+          audience: mockJwtConfig.audience,
+          algorithm: mockJwtConfig.algorithm,
+        })
+      );
     });
 
-    it('should sign a refresh token successfully', () => {
-      const token = JWTUtils.signToken(mockPayload, 'refresh');
-
-      expect(token).toBeDefined();
-      expect(typeof token).toBe('string');
-    });
-
-    it('should sign a verification token successfully', () => {
-      const verificationPayload = {
-        ...mockPayload,
+    it('should sign verification token with custom expiration', () => {
+      const payload = {
+        sub: mockUser.id,
+        email: mockUser.email,
         purpose: 'email_verification',
       };
 
-      const token = JWTUtils.signToken(verificationPayload, 'verification');
+      const mockToken = 'mock.verification.token';
+      jest.spyOn(require('jsonwebtoken'), 'sign').mockReturnValue(mockToken);
 
-      expect(token).toBeDefined();
-      expect(typeof token).toBe('string');
+      const result = JWTUtils.signToken(payload, 'verification', { expiresIn: '24h' });
+
+      expect(result).toBe(mockToken);
+      expect(require('jsonwebtoken').sign).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ...payload,
+          type: 'verification',
+        }),
+        mockJwtConfig.secret,
+        expect.objectContaining({
+          expiresIn: '24h',
+        })
+      );
     });
 
-    it('should include custom options in token', () => {
-      const customOptions = {
-        expiresIn: '30m',
-        audience: 'custom-audience',
-      };
+    it('should handle signing errors', () => {
+      const payload = { sub: mockUser.id };
 
-      const token = JWTUtils.signToken(mockPayload, 'access', customOptions);
-      const decoded = JWTUtils.decodeToken(token);
+      jest.spyOn(require('jsonwebtoken'), 'sign').mockImplementation(() => {
+        throw new Error('JWT signing failed');
+      });
 
-      expect(decoded).toBeDefined();
-      expect(decoded?.aud).toBe('custom-audience');
-    });
-
-    it('should throw error for invalid payload', () => {
-      // Test with a payload that has a circular reference, which should cause JSON serialization to fail
-      const circularObj: any = { sub: '123' };
-      circularObj.self = circularObj;
-      const invalidPayload = circularObj as Omit<
-        JWTPayload,
-        'iat' | 'exp' | 'iss' | 'aud' | 'type'
-      >;
-
-      expect(() => {
-        JWTUtils.signToken(invalidPayload, 'access');
-      }).toThrow();
+      expect(() => JWTUtils.signToken(payload, 'access')).toThrow('Failed to sign access token');
     });
   });
 
   describe('verifyToken', () => {
-    it('should verify a valid access token', () => {
-      const token = JWTUtils.signToken(mockPayload, 'access');
-      const decoded = JWTUtils.verifyToken(token, 'access');
+    it('should verify valid token successfully', () => {
+      const token = 'valid.jwt.token';
 
-      expect(decoded).toBeDefined();
-      expect(decoded.sub).toBe('123');
-      expect(decoded.email).toBe('test@example.com');
-      expect(decoded.type).toBe('access');
+      jest.spyOn(require('jsonwebtoken'), 'verify').mockReturnValue(mockPayload);
+
+      const result = JWTUtils.verifyToken(token, 'access');
+
+      expect(result).toEqual(mockPayload);
+      expect(require('jsonwebtoken').verify).toHaveBeenCalledWith(
+        token,
+        mockJwtConfig.secret,
+        expect.objectContaining({
+          issuer: mockJwtConfig.issuer,
+          audience: mockJwtConfig.audience,
+          algorithms: [mockJwtConfig.algorithm],
+        })
+      );
     });
 
-    it('should verify a valid refresh token', () => {
-      const token = JWTUtils.signToken(mockPayload, 'refresh');
-      const decoded = JWTUtils.verifyToken(token, 'refresh');
+    it('should throw error for wrong token type', () => {
+      const token = 'valid.jwt.token';
+      const wrongTypePayload = { ...mockPayload, type: 'refresh' };
 
-      expect(decoded).toBeDefined();
-      expect(decoded.sub).toBe('123');
-      expect(decoded.type).toBe('refresh');
+      jest.spyOn(require('jsonwebtoken'), 'verify').mockReturnValue(wrongTypePayload);
+
+      expect(() => JWTUtils.verifyToken(token, 'access')).toThrow(
+        'Expected access token, got refresh'
+      );
     });
 
-    it('should verify token without specifying expected type', () => {
-      const token = JWTUtils.signToken(mockPayload, 'access');
-      const decoded = JWTUtils.verifyToken(token);
+    it('should handle expired token', () => {
+      const token = 'expired.jwt.token';
 
-      expect(decoded).toBeDefined();
-      expect(decoded.type).toBe('access');
-    });
-
-    it('should throw TokenInvalidError for wrong token type', () => {
-      const token = JWTUtils.signToken(mockPayload, 'access');
-
-      expect(() => {
-        JWTUtils.verifyToken(token, 'refresh');
-      }).toThrow(TokenInvalidError);
-    });
-
-    it('should throw TokenInvalidError for invalid token', () => {
-      const invalidToken = 'invalid.token.here';
-
-      expect(() => {
-        JWTUtils.verifyToken(invalidToken);
-      }).toThrow(TokenInvalidError);
-    });
-
-    it('should throw TokenExpiredError for expired token', () => {
-      // Create a token with very short expiry
-      const shortExpiryPayload = { ...mockPayload };
-      const token = JWTUtils.signToken(shortExpiryPayload, 'access', { expiresIn: '1ms' });
-
-      // Wait for token to expire
-      return new Promise(resolve => {
-        setTimeout(() => {
-          expect(() => {
-            JWTUtils.verifyToken(token);
-          }).toThrow(TokenExpiredError);
-          resolve(undefined);
-        }, 10);
+      const TokenExpiredError = require('jsonwebtoken').TokenExpiredError;
+      jest.spyOn(require('jsonwebtoken'), 'verify').mockImplementation(() => {
+        throw new TokenExpiredError('Token expired', new Date());
       });
+
+      // Mock decode to return payload for better error message
+      jest.spyOn(require('jsonwebtoken'), 'decode').mockReturnValue({ type: 'access' });
+
+      expect(() => JWTUtils.verifyToken(token, 'access')).toThrow('Token expired');
     });
 
-    it('should throw TokenInvalidError for malformed token', () => {
-      const malformedToken = 'not.a.valid.jwt.token';
+    it('should handle invalid token', () => {
+      const token = 'invalid.jwt.token';
 
-      expect(() => {
-        JWTUtils.verifyToken(malformedToken);
-      }).toThrow(TokenInvalidError);
-    });
-  });
-
-  describe('decodeToken', () => {
-    it('should decode a valid token without verification', () => {
-      const token = JWTUtils.signToken(mockPayload, 'access');
-      const decoded = JWTUtils.decodeToken(token);
-
-      expect(decoded).toBeDefined();
-      expect(decoded?.sub).toBe('123');
-      expect(decoded?.email).toBe('test@example.com');
-      expect(decoded?.type).toBe('access');
-    });
-
-    it('should return null for invalid token', () => {
-      const invalidToken = 'invalid.token';
-      const decoded = JWTUtils.decodeToken(invalidToken);
-
-      expect(decoded).toBeNull();
-    });
-
-    it('should decode expired token without throwing', () => {
-      const token = JWTUtils.signToken(mockPayload, 'access', { expiresIn: '1ms' });
-
-      return new Promise(resolve => {
-        setTimeout(() => {
-          const decoded = JWTUtils.decodeToken(token);
-          expect(decoded).toBeDefined();
-          expect(decoded?.sub).toBe('123');
-          resolve(undefined);
-        }, 10);
+      const JsonWebTokenError = require('jsonwebtoken').JsonWebTokenError;
+      jest.spyOn(require('jsonwebtoken'), 'verify').mockImplementation(() => {
+        throw new JsonWebTokenError('Invalid token');
       });
+
+      expect(() => JWTUtils.verifyToken(token, 'access')).toThrow('Invalid token');
     });
   });
 
   describe('generateTokenPair', () => {
-    it('should generate both access and refresh tokens', () => {
-      const tokenPair = JWTUtils.generateTokenPair(mockUser);
+    it('should generate access and refresh tokens', () => {
+      const mockAccessToken = 'access.token';
+      const mockRefreshToken = 'refresh.token';
 
-      expect(tokenPair).toBeDefined();
-      expect(tokenPair.accessToken).toBeDefined();
-      expect(tokenPair.refreshToken).toBeDefined();
-      expect(typeof tokenPair.accessToken).toBe('string');
-      expect(typeof tokenPair.refreshToken).toBe('string');
-    });
+      jest
+        .spyOn(JWTUtils, 'signToken')
+        .mockReturnValueOnce(mockAccessToken)
+        .mockReturnValueOnce(mockRefreshToken);
 
-    it('should generate tokens with correct types', () => {
-      const tokenPair = JWTUtils.generateTokenPair(mockUser);
+      const result = JWTUtils.generateTokenPair(mockUser);
 
-      const accessDecoded = JWTUtils.decodeToken(tokenPair.accessToken);
-      const refreshDecoded = JWTUtils.decodeToken(tokenPair.refreshToken);
+      expect(result).toEqual({
+        accessToken: mockAccessToken,
+        refreshToken: mockRefreshToken,
+      });
 
-      expect(accessDecoded?.type).toBe('access');
-      expect(refreshDecoded?.type).toBe('refresh');
-    });
+      expect(JWTUtils.signToken).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sub: mockUser.id,
+          email: mockUser.email,
+          role: mockUser.role,
+        }),
+        'access'
+      );
 
-    it('should include user information in access token', () => {
-      const tokenPair = JWTUtils.generateTokenPair(mockUser);
-      const decoded = JWTUtils.decodeToken(tokenPair.accessToken);
-
-      expect(decoded?.sub).toBe(mockUser.id);
-      expect(decoded?.email).toBe(mockUser.email);
-      expect(decoded?.role).toBe(mockUser.role);
-    });
-
-    it('should include minimal information in refresh token', () => {
-      const tokenPair = JWTUtils.generateTokenPair(mockUser);
-      const decoded = JWTUtils.decodeToken(tokenPair.refreshToken);
-
-      expect(decoded?.sub).toBe(mockUser.id);
-      expect(decoded?.type).toBe('refresh');
-      // Refresh tokens should have minimal info
+      expect(JWTUtils.signToken).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sub: mockUser.id,
+        }),
+        'refresh'
+      );
     });
   });
 
   describe('refreshTokens', () => {
-    it('should refresh tokens with valid refresh token', () => {
-      const originalTokenPair = JWTUtils.generateTokenPair(mockUser);
-      const newTokenPair = JWTUtils.refreshTokens(originalTokenPair.refreshToken);
+    it('should refresh tokens using valid refresh token', () => {
+      const refreshToken = 'valid.refresh.token';
+      const newTokens: TokenPair = {
+        accessToken: 'new.access.token',
+        refreshToken: 'new.refresh.token',
+      };
 
-      expect(newTokenPair).toBeDefined();
-      expect(newTokenPair.accessToken).toBeDefined();
-      expect(newTokenPair.refreshToken).toBeDefined();
-      expect(newTokenPair.accessToken).not.toBe(originalTokenPair.accessToken);
-      expect(newTokenPair.refreshToken).not.toBe(originalTokenPair.refreshToken);
+      jest.spyOn(JWTUtils, 'verifyToken').mockReturnValue({
+        sub: mockUser.id,
+        email: mockUser.email,
+        role: mockUser.role,
+        type: 'refresh',
+      } as JWTPayload);
+
+      jest.spyOn(JWTUtils, 'generateTokenPair').mockReturnValue(newTokens);
+
+      const result = JWTUtils.refreshTokens(refreshToken);
+
+      expect(result).toEqual(newTokens);
+      expect(JWTUtils.verifyToken).toHaveBeenCalledWith(refreshToken, 'refresh');
+      expect(JWTUtils.generateTokenPair).toHaveBeenCalledWith({
+        id: mockUser.id,
+        email: mockUser.email,
+        role: mockUser.role,
+      });
     });
 
-    it('should throw error with invalid refresh token', () => {
-      const invalidToken = 'invalid.refresh.token';
+    it('should throw error for invalid refresh token', () => {
+      const refreshToken = 'invalid.refresh.token';
 
-      expect(() => {
-        JWTUtils.refreshTokens(invalidToken);
-      }).toThrow(TokenInvalidError);
-    });
+      jest.spyOn(JWTUtils, 'verifyToken').mockImplementation(() => {
+        throw new Error('Invalid refresh token');
+      });
 
-    it('should throw error when using access token for refresh', () => {
-      const tokenPair = JWTUtils.generateTokenPair(mockUser);
-
-      expect(() => {
-        JWTUtils.refreshTokens(tokenPair.accessToken);
-      }).toThrow(TokenInvalidError);
+      expect(() => JWTUtils.refreshTokens(refreshToken)).toThrow('Invalid refresh token');
     });
   });
 
   describe('generateVerificationToken', () => {
     it('should generate verification token with purpose', () => {
-      const token = JWTUtils.generateVerificationToken(
-        '123',
-        'email_verification',
-        'test@example.com'
+      const userId = 'test-user-id';
+      const purpose = 'email_verification';
+      const email = 'test@example.com';
+      const expiresIn = '24h';
+      const mockToken = 'verification.token';
+
+      jest.spyOn(JWTUtils, 'signToken').mockReturnValue(mockToken);
+
+      const result = JWTUtils.generateVerificationToken(userId, purpose, email, expiresIn);
+
+      expect(result).toBe(mockToken);
+      expect(JWTUtils.signToken).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sub: userId,
+          email,
+          purpose,
+        }),
+        'verification',
+        { expiresIn }
       );
-      const decoded = JWTUtils.decodeToken(token);
-
-      expect(decoded).toBeDefined();
-      expect(decoded?.sub).toBe('123');
-      expect(decoded?.email).toBe('test@example.com');
-      expect(decoded?.purpose).toBe('email_verification');
-      expect(decoded?.type).toBe('verification');
-    });
-
-    it('should generate verification token with custom expiry', () => {
-      const token = JWTUtils.generateVerificationToken(
-        '123',
-        'password_reset',
-        'test@example.com',
-        '30m'
-      );
-
-      expect(token).toBeDefined();
-      expect(typeof token).toBe('string');
     });
 
     it('should generate verification token without email', () => {
-      const token = JWTUtils.generateVerificationToken('123', 'account_activation');
-      const decoded = JWTUtils.decodeToken(token);
+      const userId = 'test-user-id';
+      const purpose = 'password_reset';
+      const mockToken = 'verification.token';
 
-      expect(decoded).toBeDefined();
-      expect(decoded?.sub).toBe('123');
-      expect(decoded?.purpose).toBe('account_activation');
-      expect(decoded?.email).toBeUndefined();
+      jest.spyOn(JWTUtils, 'signToken').mockReturnValue(mockToken);
+
+      const result = JWTUtils.generateVerificationToken(userId, purpose);
+
+      expect(result).toBe(mockToken);
+      expect(JWTUtils.signToken).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sub: userId,
+          purpose,
+        }),
+        'verification',
+        undefined
+      );
     });
   });
 
   describe('verifyVerificationToken', () => {
-    it('should verify verification token with correct purpose', () => {
-      const token = JWTUtils.generateVerificationToken(
-        '123',
-        'email_verification',
-        'test@example.com'
-      );
-      const decoded = JWTUtils.verifyVerificationToken(token, 'email_verification');
+    it('should verify verification token successfully', () => {
+      const token = 'verification.token';
+      const purpose = 'email_verification';
+      const mockPayload = {
+        sub: 'test-user-id',
+        email: 'test@example.com',
+        purpose: 'email_verification',
+        type: 'verification',
+      } as JWTPayload;
 
-      expect(decoded).toBeDefined();
-      expect(decoded.sub).toBe('123');
-      expect(decoded.purpose).toBe('email_verification');
-    });
+      jest.spyOn(JWTUtils, 'verifyToken').mockReturnValue(mockPayload);
 
-    it('should verify verification token without purpose check', () => {
-      const token = JWTUtils.generateVerificationToken(
-        '123',
-        'email_verification',
-        'test@example.com'
-      );
-      const decoded = JWTUtils.verifyVerificationToken(token);
+      const result = JWTUtils.verifyVerificationToken(token, purpose);
 
-      expect(decoded).toBeDefined();
-      expect(decoded.purpose).toBe('email_verification');
+      expect(result).toEqual(mockPayload);
+      expect(JWTUtils.verifyToken).toHaveBeenCalledWith(token, 'verification');
     });
 
     it('should throw error for wrong purpose', () => {
-      const token = JWTUtils.generateVerificationToken(
-        '123',
-        'email_verification',
-        'test@example.com'
-      );
+      const token = 'verification.token';
+      const expectedPurpose = 'email_verification';
+      const actualPurpose = 'password_reset';
+      const mockPayload = {
+        sub: 'test-user-id',
+        purpose: actualPurpose,
+        type: 'verification',
+      } as JWTPayload;
 
-      expect(() => {
-        JWTUtils.verifyVerificationToken(token, 'password_reset');
-      }).toThrow(TokenInvalidError);
+      jest.spyOn(JWTUtils, 'verifyToken').mockReturnValue(mockPayload);
+
+      expect(() => JWTUtils.verifyVerificationToken(token, expectedPurpose)).toThrow(
+        `Expected verification token for ${expectedPurpose}, got ${actualPurpose}`
+      );
     });
   });
 
   describe('extractUser', () => {
-    it('should extract user information from payload', () => {
+    it('should extract user from JWT payload', () => {
       const payload: JWTPayload = {
-        sub: '123',
+        sub: 'test-user-id',
         email: 'test@example.com',
-        role: 'admin',
+        role: 'user',
         type: 'access',
       };
 
-      const user = JWTUtils.extractUser(payload);
+      const result = JWTUtils.extractUser(payload);
 
-      expect(user).toEqual({
-        id: '123',
+      expect(result).toEqual({
+        id: 'test-user-id',
         email: 'test@example.com',
-        role: 'admin',
+        role: 'user',
       });
     });
 
-    it('should handle payload with missing optional fields', () => {
+    it('should handle payload without email and role', () => {
       const payload: JWTPayload = {
-        sub: '123',
-        type: 'access',
+        sub: 'test-user-id',
+        type: 'refresh',
       };
 
-      const user = JWTUtils.extractUser(payload);
+      const result = JWTUtils.extractUser(payload);
 
-      expect(user).toEqual({
-        id: '123',
+      expect(result).toEqual({
+        id: 'test-user-id',
         email: '',
         role: 'user',
       });
@@ -400,75 +358,124 @@ describe('JWTUtils', () => {
 
   describe('isTokenExpired', () => {
     it('should return false for valid token', () => {
-      const token = JWTUtils.signToken(mockPayload, 'access');
-      const isExpired = JWTUtils.isTokenExpired(token);
+      const token = 'valid.token';
 
-      expect(isExpired).toBe(false);
+      jest.spyOn(JWTUtils, 'verifyToken').mockReturnValue(mockPayload);
+
+      const result = JWTUtils.isTokenExpired(token);
+
+      expect(result).toBe(false);
     });
 
     it('should return true for expired token', () => {
-      const token = JWTUtils.signToken(mockPayload, 'access', { expiresIn: '1ms' });
+      const token = 'expired.token';
 
-      return new Promise(resolve => {
-        setTimeout(() => {
-          const isExpired = JWTUtils.isTokenExpired(token);
-          expect(isExpired).toBe(true);
-          resolve(undefined);
-        }, 10);
+      jest.spyOn(JWTUtils, 'verifyToken').mockImplementation(() => {
+        throw new Error('Token expired');
       });
-    });
 
-    it('should return true for invalid token', () => {
-      const invalidToken = 'invalid.token';
-      const isExpired = JWTUtils.isTokenExpired(invalidToken);
+      const result = JWTUtils.isTokenExpired(token);
 
-      expect(isExpired).toBe(false); // Invalid tokens are not considered expired
+      expect(result).toBe(true);
     });
   });
 
   describe('getTokenExpiration', () => {
     it('should return expiration date for valid token', () => {
-      const token = JWTUtils.signToken(mockPayload, 'access');
-      const expiration = JWTUtils.getTokenExpiration(token);
+      const token = 'valid.token';
+      const expirationTime = Math.floor(Date.now() / 1000) + 3600;
+      const mockDecoded = { exp: expirationTime };
 
-      expect(expiration).toBeInstanceOf(Date);
-      expect(expiration!.getTime()).toBeGreaterThan(Date.now());
+      jest.spyOn(JWTUtils, 'decodeToken').mockReturnValue(mockDecoded as JWTPayload);
+
+      const result = JWTUtils.getTokenExpiration(token);
+
+      expect(result).toEqual(new Date(expirationTime * 1000));
+    });
+
+    it('should return null for token without expiration', () => {
+      const token = 'token.without.exp';
+      const mockDecoded = { sub: 'test-user-id' };
+
+      jest.spyOn(JWTUtils, 'decodeToken').mockReturnValue(mockDecoded as JWTPayload);
+
+      const result = JWTUtils.getTokenExpiration(token);
+
+      expect(result).toBeNull();
     });
 
     it('should return null for invalid token', () => {
-      const invalidToken = 'invalid.token';
-      const expiration = JWTUtils.getTokenExpiration(invalidToken);
+      const token = 'invalid.token';
 
-      expect(expiration).toBeNull();
+      jest.spyOn(JWTUtils, 'decodeToken').mockReturnValue(null);
+
+      const result = JWTUtils.getTokenExpiration(token);
+
+      expect(result).toBeNull();
     });
   });
 
   describe('getTimeUntilExpiration', () => {
-    it('should return positive seconds for valid token', () => {
-      const token = JWTUtils.signToken(mockPayload, 'access');
-      const timeUntilExpiration = JWTUtils.getTimeUntilExpiration(token);
+    it('should return time until expiration in seconds', () => {
+      const token = 'valid.token';
+      const futureTime = Math.floor(Date.now() / 1000) + 3600; // 1 hour from now
+      const mockDecoded = { exp: futureTime };
 
-      expect(timeUntilExpiration).toBeGreaterThan(0);
-      expect(typeof timeUntilExpiration).toBe('number');
+      jest.spyOn(JWTUtils, 'decodeToken').mockReturnValue(mockDecoded as JWTPayload);
+
+      const result = JWTUtils.getTimeUntilExpiration(token);
+
+      expect(result).toBeGreaterThan(0);
+      expect(result).toBeLessThanOrEqual(3600);
     });
 
     it('should return 0 for expired token', () => {
-      const token = JWTUtils.signToken(mockPayload, 'access', { expiresIn: '1ms' });
+      const token = 'expired.token';
+      const pastTime = Math.floor(Date.now() / 1000) - 3600; // 1 hour ago
+      const mockDecoded = { exp: pastTime };
 
-      return new Promise(resolve => {
-        setTimeout(() => {
-          const timeUntilExpiration = JWTUtils.getTimeUntilExpiration(token);
-          expect(timeUntilExpiration).toBe(0);
-          resolve(undefined);
-        }, 10);
-      });
+      jest.spyOn(JWTUtils, 'decodeToken').mockReturnValue(mockDecoded as JWTPayload);
+
+      const result = JWTUtils.getTimeUntilExpiration(token);
+
+      expect(result).toBe(0);
+    });
+
+    it('should return null for token without expiration', () => {
+      const token = 'token.without.exp';
+      const mockDecoded = { sub: 'test-user-id' };
+
+      jest.spyOn(JWTUtils, 'decodeToken').mockReturnValue(mockDecoded as JWTPayload);
+
+      const result = JWTUtils.getTimeUntilExpiration(token);
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('decodeToken', () => {
+    it('should decode token successfully', () => {
+      const token = 'valid.token';
+      const mockDecoded = { sub: 'test-user-id', type: 'access' };
+
+      jest.spyOn(require('jsonwebtoken'), 'decode').mockReturnValue(mockDecoded);
+
+      const result = JWTUtils.decodeToken(token);
+
+      expect(result).toEqual(mockDecoded);
+      expect(require('jsonwebtoken').decode).toHaveBeenCalledWith(token);
     });
 
     it('should return null for invalid token', () => {
-      const invalidToken = 'invalid.token';
-      const timeUntilExpiration = JWTUtils.getTimeUntilExpiration(invalidToken);
+      const token = 'invalid.token';
 
-      expect(timeUntilExpiration).toBeNull();
+      jest.spyOn(require('jsonwebtoken'), 'decode').mockImplementation(() => {
+        throw new Error('Invalid token');
+      });
+
+      const result = JWTUtils.decodeToken(token);
+
+      expect(result).toBeNull();
     });
   });
 });

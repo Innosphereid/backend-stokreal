@@ -4,7 +4,9 @@ module.exports = {
   roots: ['<rootDir>/src'],
   testMatch: [
     '**/__tests__/**/*.ts',
-    '**/?(*.)+(spec|test).ts'
+    '**/?(*.)+(spec|test).ts',
+    '**/tests/**/*.test.ts',
+    '**/tests/**/*.spec.ts',
   ],
   transform: {
     '^.+\\.ts$': 'ts-jest',
@@ -12,26 +14,42 @@ module.exports = {
   collectCoverageFrom: [
     'src/**/*.ts',
     '!src/**/*.d.ts',
+    '!src/index.ts',
+    '!src/tests/**/*.ts',
     '!src/**/*.test.ts',
     '!src/**/*.spec.ts',
   ],
   coverageDirectory: 'coverage',
-  coverageReporters: [
-    'text',
-    'lcov',
-    'html'
-  ],
-  setupFilesAfterEnv: ['<rootDir>/src/tests/setup.ts'],
-  moduleNameMapper: {
-    '^@/(.*)$': '<rootDir>/src/$1',
-    '^@config/(.*)$': '<rootDir>/src/config/$1',
-    '^@controllers/(.*)$': '<rootDir>/src/controllers/$1',
-    '^@middleware/(.*)$': '<rootDir>/src/middleware/$1',
-    '^@models/(.*)$': '<rootDir>/src/models/$1',
-    '^@routes/(.*)$': '<rootDir>/src/routes/$1',
-    '^@services/(.*)$': '<rootDir>/src/services/$1',
-    '^@utils/(.*)$': '<rootDir>/src/utils/$1',
-    '^@types/(.*)$': '<rootDir>/src/types/$1',
+  coverageReporters: ['text', 'lcov', 'html'],
+  coverageThreshold: {
+    global: {
+      branches: 90,
+      functions: 90,
+      lines: 90,
+      statements: 90,
+    },
   },
+  setupFilesAfterEnv: ['<rootDir>/src/tests/setup.ts'],
   testTimeout: 10000,
+  verbose: true,
+  clearMocks: true,
+  restoreMocks: true,
+  moduleNameMapping: {
+    '^@/(.*)$': '<rootDir>/src/$1',
+  },
+  testPathIgnorePatterns: [
+    '/node_modules/',
+    '/dist/',
+    '/build/',
+  ],
+  collectCoverage: true,
+  coveragePathIgnorePatterns: [
+    '/node_modules/',
+    '/dist/',
+    '/build/',
+    '/coverage/',
+    '/src/tests/',
+    '/src/**/*.test.ts',
+    '/src/**/*.spec.ts',
+  ],
 };
