@@ -142,7 +142,8 @@ export class MailerService {
 
       // Send actual email (both production and development when MAIL_LOG_ONLY is not true)
       const result = await this.transporter.sendMail(mailOptions);
-      logger.info(`Email sent successfully to ${mailOptions.to}`, { messageId: result.messageId });
+      const recipientString = Array.isArray(options.to) ? options.to.join(', ') : options.to;
+      logger.info(`Email sent successfully to ${recipientString}`, { messageId: result.messageId });
       return result;
     } catch (error) {
       logger.error('Failed to send email:', error);
