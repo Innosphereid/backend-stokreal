@@ -31,7 +31,15 @@ export class UserModel extends BaseModel<User> {
   async findByEmailWithPassword(email: string): Promise<(User & { password_hash: string }) | null> {
     const user = await this.db(this.tableName).select('*').where({ email }).first();
 
-    return user || null;
+    if (!user) {
+      return null;
+    }
+
+    // Ensure email_verified is included with a default value
+    return {
+      ...user,
+      email_verified: user.email_verified || false,
+    };
   }
 
   /**
@@ -66,6 +74,7 @@ export class UserModel extends BaseModel<User> {
       password_hash: userData.password, // This should be hashed
       subscription_plan: 'free', // Default to free plan
       is_active: true,
+      email_verified: false, // Default to false for new users
     } as Omit<User, 'id' | 'created_at' | 'updated_at'>);
   }
 

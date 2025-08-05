@@ -32,6 +32,7 @@ export interface User extends DatabaseRecord {
   subscription_plan: 'free' | 'premium';
   subscription_expires_at?: Date | undefined;
   is_active: boolean;
+  email_verified: boolean;
   last_login?: Date | undefined;
 }
 
@@ -53,6 +54,7 @@ export interface UpdateUserRequest {
   last_login?: Date;
   subscription_plan?: 'free' | 'premium';
   subscription_expires_at?: Date;
+  email_verified?: boolean;
 }
 
 export interface QueryParams {

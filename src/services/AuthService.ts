@@ -3,6 +3,7 @@ import { JWTUtils } from '@/utils/jwt';
 import { logger } from '@/utils/logger';
 import { PasswordUtils } from '@/utils/password';
 import { LoginAttemptService } from './LoginAttemptService';
+import { AuditLogService } from './AuditLogService';
 import { mailer } from '@/config/mailer';
 import {
   LoginCredentials,
@@ -22,10 +23,12 @@ import { ErrorCodes } from '@/types/errors';
 export class AuthService implements AuthServiceInterface {
   private readonly userService: UserService;
   private readonly loginAttemptService: LoginAttemptService;
+  private readonly auditLogService: AuditLogService;
 
   constructor() {
     this.userService = new UserService();
     this.loginAttemptService = new LoginAttemptService();
+    this.auditLogService = new AuditLogService();
   }
 
   /**
@@ -57,10 +60,14 @@ export class AuthService implements AuthServiceInterface {
 
       // Send welcome email with verification token
       try {
-        await mailer.sendWelcomeEmail(newUser.email, newUser.full_name, verificationToken.token);
-        logger.info(`Welcome email sent to ${newUser.email}`);
+        await mailer.sendVerificationEmail(
+          newUser.email,
+          newUser.full_name,
+          verificationToken.token
+        );
+        logger.info(`Verification email sent to ${newUser.email}`);
       } catch (emailError) {
-        logger.error('Failed to send welcome email:', emailError);
+        logger.error('Failed to send verification email:', emailError);
         // Don't fail registration if email fails
       }
 
@@ -490,6 +497,43 @@ export class AuthService implements AuthServiceInterface {
   }
 
   /**
+   * Verify email using verification token
+   */
+  async verifyEmail(token: string): Promise<void> {
+    try {
+      logger.info('Email verification attempt');
+
+      // Verify the email verification token
+      const payload = await this.verifyToken(token, 'email_verification');
+
+      // Get user details
+      const user = await this.userService.getUserById(payload.sub);
+      if (!user) {
+        throw createError('User not found', 404);
+      }
+
+      // Check if email is already verified
+      if (user.email_verified) {
+        logger.info(`Email already verified for user ${payload.sub}`);
+        return; // Don't throw error, just return success
+      }
+
+      // Update user's email verification status
+      await this.userService.updateUser(payload.sub, { email_verified: true });
+
+      logger.info(`Email verified successfully for user ${payload.sub}`);
+    } catch (error) {
+      logger.error('Email verification failed:', error);
+
+      if (error instanceof Error && 'statusCode' in error) {
+        throw error;
+      }
+
+      throw createError('Email verification failed', 500);
+    }
+  }
+
+  /**
    * Validate user credentials (private method)
    */
   private async validateUserCredentials(email: string, password: string): Promise<User | null> {
@@ -522,6 +566,7 @@ export class AuthService implements AuthServiceInterface {
         subscription_plan: userWithPassword.subscription_plan,
         subscription_expires_at: userWithPassword.subscription_expires_at,
         is_active: userWithPassword.is_active,
+        email_verified: (userWithPassword as any).email_verified || false,
         created_at: userWithPassword.created_at,
         updated_at: userWithPassword.updated_at,
         ...(userWithPassword.last_login && { last_login: userWithPassword.last_login }),

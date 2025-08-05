@@ -213,4 +213,26 @@ export class AuthController {
       data: null,
     });
   });
+
+  /**
+   * Verify email using verification token
+   */
+  verifyEmail = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    logger.info('Email verification request received');
+
+    const { token } = req.body;
+
+    if (!token) {
+      res.status(400).json({ error: 'Verification token is required' });
+      return;
+    }
+
+    // Verify email
+    await this.authService.verifyEmail(token);
+
+    res.status(200).json({
+      message: 'Email verified successfully. You can now login to your account.',
+      data: null,
+    });
+  });
 }
