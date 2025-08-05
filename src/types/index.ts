@@ -18,36 +18,41 @@ export interface PaginatedResponse<T = any> extends ApiResponse<T> {
 }
 
 export interface DatabaseRecord {
-  id: number;
+  id: string; // Changed from number to string for UUID
   created_at: Date;
   updated_at: Date;
 }
 
 export interface User extends DatabaseRecord {
   email: string;
-  username: string;
-  first_name: string;
-  last_name: string;
+  password_hash: string;
+  full_name: string;
+  phone?: string;
+  whatsapp_number?: string;
+  subscription_plan: 'free' | 'premium';
+  subscription_expires_at?: Date;
   is_active: boolean;
   last_login?: Date;
 }
 
 export interface CreateUserRequest {
   email: string;
-  username: string;
-  first_name: string;
-  last_name: string;
   password: string;
+  full_name: string;
+  phone?: string;
+  whatsapp_number?: string;
 }
 
 export interface UpdateUserRequest {
   email?: string;
-  username?: string;
-  first_name?: string;
-  last_name?: string;
+  full_name?: string;
+  phone?: string;
+  whatsapp_number?: string;
   is_active?: boolean;
   password?: string;
   last_login?: Date;
+  subscription_plan?: 'free' | 'premium';
+  subscription_expires_at?: Date;
 }
 
 export interface QueryParams {
@@ -61,7 +66,7 @@ export interface QueryParams {
 export interface Post extends DatabaseRecord {
   title: string;
   content: string;
-  author_id: number;
+  author_id: string; // Changed from number to string for UUID
   status: 'draft' | 'published' | 'archived';
   published_at?: Date;
 }
@@ -69,7 +74,7 @@ export interface Post extends DatabaseRecord {
 export interface CreatePostRequest {
   title: string;
   content: string;
-  author_id: number;
+  author_id: string; // Changed from number to string for UUID
   status?: 'draft' | 'published' | 'archived';
 }
 

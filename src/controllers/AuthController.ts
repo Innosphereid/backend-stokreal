@@ -77,7 +77,7 @@ export class AuthController {
 
     // Get complete user data from database
     const userService = new (await import('@/services/UserService')).UserService();
-    const fullUser = await userService.getUserById(parseInt(user.id, 10));
+    const fullUser = await userService.getUserById(user.id);
 
     if (!fullUser) {
       logger.error('Failed to get full user data after login');

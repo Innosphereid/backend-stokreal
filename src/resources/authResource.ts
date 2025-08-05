@@ -8,12 +8,15 @@ export class AuthResource {
   static formatRegisterResponse(user: User): RegisterResponse {
     return {
       user: {
-        id: user.id.toString(),
+        id: user.id,
         email: user.email,
-        username: user.username,
-        first_name: user.first_name,
-        last_name: user.last_name,
+        full_name: user.full_name,
+        phone: user.phone,
+        whatsapp_number: user.whatsapp_number,
+        subscription_plan: user.subscription_plan,
         is_active: user.is_active,
+        created_at: user.created_at,
+        email_verified: false, // TODO: Implement email verification
       },
     };
   }

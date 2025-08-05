@@ -13,7 +13,7 @@ export abstract class BaseModel<T extends DatabaseRecord> {
   /**
    * Find a record by ID
    */
-  async findById(id: number): Promise<T | null> {
+  async findById(id: string): Promise<T | null> {
     const record = await this.db(this.tableName).where({ id }).first();
     return record || null;
   }
@@ -61,7 +61,7 @@ export abstract class BaseModel<T extends DatabaseRecord> {
   /**
    * Update a record by ID
    */
-  async update(id: number, data: Partial<Omit<T, 'id' | 'created_at'>>): Promise<T | null> {
+  async update(id: string, data: Partial<Omit<T, 'id' | 'created_at'>>): Promise<T | null> {
     const [record] = await this.db(this.tableName)
       .where({ id })
       .update({
@@ -76,7 +76,7 @@ export abstract class BaseModel<T extends DatabaseRecord> {
   /**
    * Delete a record by ID
    */
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string): Promise<boolean> {
     const deletedRows = await this.db(this.tableName).where({ id }).del();
     return deletedRows > 0;
   }
@@ -99,7 +99,7 @@ export abstract class BaseModel<T extends DatabaseRecord> {
   /**
    * Check if a record exists by ID
    */
-  async exists(id: number): Promise<boolean> {
+  async exists(id: string): Promise<boolean> {
     const record = await this.db(this.tableName).where({ id }).first();
     return !!record;
   }
@@ -119,7 +119,7 @@ export abstract class BaseModel<T extends DatabaseRecord> {
   }
 
   /**
-   * Execute a raw query
+   * Execute raw SQL query
    */
   async raw(query: string, bindings?: readonly unknown[]): Promise<unknown> {
     if (bindings) {
@@ -129,38 +129,30 @@ export abstract class BaseModel<T extends DatabaseRecord> {
   }
 
   /**
-   * Begin a database transaction
+   * Execute operations within a transaction
    */
   async transaction<R>(callback: (trx: Knex.Transaction) => Promise<R>): Promise<R> {
     return await this.db.transaction(callback);
   }
 
   /**
-   * Apply search functionality - default implementation searches in 'name' field
-   * Child classes should override this method for entity-specific search
+   * Apply search functionality (to be implemented by child classes)
    */
   protected applySearch(query: Knex.QueryBuilder, search: string): Knex.QueryBuilder {
-    // Default implementation - searches in common fields if they exist
-    // Child classes should override this for specific search logic
-    return query.where(builder => {
-      // Try to search in common text fields that might exist
-      const searchTerm = `%${search}%`;
-      builder
-        .whereRaw('CAST(id AS TEXT) ILIKE ?', [searchTerm])
-        .orWhereRaw('created_at::TEXT ILIKE ?', [searchTerm])
-        .orWhereRaw('updated_at::TEXT ILIKE ?', [searchTerm]);
-    });
+    // Default implementation - child classes should override this
+    // search parameter is intentionally unused in default implementation
+    return query;
   }
 
   /**
-   * Get the table name
+   * Get table name
    */
   getTableName(): string {
     return this.tableName;
   }
 
   /**
-   * Get the database instance
+   * Get database instance
    */
   getDb(): Knex {
     return this.db;

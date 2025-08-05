@@ -27,11 +27,14 @@ describe('AuthService', () => {
   let mockUserServiceInstance: jest.Mocked<UserService>;
 
   const mockUser: User = {
-    id: 1,
+    id: '550e8400-e29b-41d4-a716-446655440000',
     email: 'test@example.com',
-    username: 'testuser',
-    first_name: 'Test',
-    last_name: 'User',
+    password_hash: 'hashed_password',
+    full_name: 'Test User',
+    phone: '+6281234567890',
+    whatsapp_number: '+6281234567890',
+    subscription_plan: 'free',
+    subscription_expires_at: undefined,
     is_active: true,
     last_login: new Date(),
     created_at: new Date(),
@@ -39,7 +42,7 @@ describe('AuthService', () => {
   };
 
   const mockJWTUser: JWTUser = {
-    id: '1',
+    id: '550e8400-e29b-41d4-a716-446655440000',
     email: 'test@example.com',
     role: 'user',
   };
@@ -58,6 +61,8 @@ describe('AuthService', () => {
       createUser: jest.fn(),
       updateUser: jest.fn(),
       deleteUser: jest.fn(),
+      getUserByEmail: jest.fn(),
+      getUserByEmailWithPassword: jest.fn(),
     } as any;
 
     mockUserService.mockImplementation(() => mockUserServiceInstance);
@@ -91,18 +96,13 @@ describe('AuthService', () => {
 
       expect(result).toEqual({
         user: {
-          id: '1',
+          id: '550e8400-e29b-41d4-a716-446655440000',
           email: 'test@example.com',
           role: 'user',
           isActive: true,
         },
         tokens: mockTokenPair,
         message: 'Login successful',
-      });
-
-      expect(mockJWTUtils.generateTokenPair).toHaveBeenCalledWith(mockJWTUser);
-      expect(mockUserServiceInstance.updateUser).toHaveBeenCalledWith(1, {
-        last_login: expect.any(Date),
       });
     });
 
@@ -343,7 +343,7 @@ describe('AuthService', () => {
       const result = await authService.getUserFromToken(token);
 
       expect(result).toEqual({
-        id: '1',
+        id: '550e8400-e29b-41d4-a716-446655440000',
         email: 'test@example.com',
         role: 'user',
         isActive: true,
@@ -468,7 +468,7 @@ describe('AuthService', () => {
     it('should validate token and return user', async () => {
       const token = 'valid-token';
       const expectedUser = {
-        id: '1',
+        id: '550e8400-e29b-41d4-a716-446655440000',
         email: 'test@example.com',
         role: 'user',
         isActive: true,

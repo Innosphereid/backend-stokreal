@@ -13,8 +13,7 @@ import {
   JWTUser,
   AuthServiceInterface,
 } from '@/types/jwt';
-import { User } from '@/types';
-import { RegisterRequest } from '@/types/auth';
+import { User, CreateUserRequest } from '@/types';
 import { createResourceConflictError, createError } from '@/utils/errors';
 import { ErrorCodes } from '@/types/errors';
 
@@ -28,7 +27,7 @@ export class AuthService implements AuthServiceInterface {
   /**
    * Register a new user
    */
-  async register(userData: RegisterRequest): Promise<User> {
+  async register(userData: CreateUserRequest): Promise<User> {
     try {
       logger.info(`Registration attempt for email: ${userData.email}`);
 
@@ -42,24 +41,8 @@ export class AuthService implements AuthServiceInterface {
         );
       }
 
-      // Check if username already exists
-      const existingUserByUsername = await this.userService.getUserByUsername(userData.username);
-      if (existingUserByUsername) {
-        throw createResourceConflictError(
-          'Username already exists',
-          ErrorCodes.USERNAME_ALREADY_EXISTS,
-          'A user with this username is already registered'
-        );
-      }
-
       // Create user using UserService
-      const newUser = await this.userService.createUser({
-        email: userData.email,
-        username: userData.username,
-        first_name: userData.first_name,
-        last_name: userData.last_name,
-        password: userData.password,
-      });
+      const newUser = await this.userService.createUser(userData);
 
       logger.info(`User ${newUser.id} registered successfully`);
 
@@ -103,7 +86,7 @@ export class AuthService implements AuthServiceInterface {
 
       // Create JWT user object
       const jwtUser: JWTUser = {
-        id: user.id.toString(),
+        id: user.id,
         email: user.email,
         role: 'user', // Default role, can be extended based on user data
       };
@@ -116,7 +99,7 @@ export class AuthService implements AuthServiceInterface {
 
       // Create authenticated user response
       const authenticatedUser: AuthenticatedUser = {
-        id: user.id.toString(),
+        id: user.id,
         email: user.email,
         role: 'user',
         isActive: user.is_active,
@@ -381,9 +364,12 @@ export class AuthService implements AuthServiceInterface {
       const user: User = {
         id: userWithPassword.id,
         email: userWithPassword.email,
-        username: userWithPassword.username,
-        first_name: userWithPassword.first_name,
-        last_name: userWithPassword.last_name,
+        password_hash: userWithPassword.password_hash,
+        full_name: userWithPassword.full_name,
+        phone: userWithPassword.phone,
+        whatsapp_number: userWithPassword.whatsapp_number,
+        subscription_plan: userWithPassword.subscription_plan,
+        subscription_expires_at: userWithPassword.subscription_expires_at,
         is_active: userWithPassword.is_active,
         created_at: userWithPassword.created_at,
         updated_at: userWithPassword.updated_at,
@@ -399,7 +385,7 @@ export class AuthService implements AuthServiceInterface {
   /**
    * Update user's last login timestamp (private method)
    */
-  private async updateLastLogin(userId: number): Promise<void> {
+  private async updateLastLogin(userId: string): Promise<void> {
     try {
       await this.userService.updateUser(userId, {
         last_login: new Date(),

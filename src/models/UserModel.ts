@@ -12,9 +12,9 @@ export class UserModel extends BaseModel<User> {
     return query.where(builder => {
       builder
         .where('email', 'ilike', `%${search}%`)
-        .orWhere('username', 'ilike', `%${search}%`)
-        .orWhere('first_name', 'ilike', `%${search}%`)
-        .orWhere('last_name', 'ilike', `%${search}%`);
+        .orWhere('full_name', 'ilike', `%${search}%`)
+        .orWhere('phone', 'ilike', `%${search}%`)
+        .orWhere('whatsapp_number', 'ilike', `%${search}%`);
     });
   }
 
@@ -35,31 +35,10 @@ export class UserModel extends BaseModel<User> {
   }
 
   /**
-   * Find user by username
-   */
-  async findByUsername(username: string): Promise<User | null> {
-    return await this.findOneBy({ username } as Partial<User>);
-  }
-
-  /**
    * Check if email exists (excluding specific user ID)
    */
-  async emailExists(email: string, excludeId?: number): Promise<boolean> {
+  async emailExists(email: string, excludeId?: string): Promise<boolean> {
     let query = this.db(this.tableName).where({ email });
-
-    if (excludeId) {
-      query = query.andWhere('id', '!=', excludeId);
-    }
-
-    const user = await query.first();
-    return !!user;
-  }
-
-  /**
-   * Check if username exists (excluding specific user ID)
-   */
-  async usernameExists(username: string, excludeId?: number): Promise<boolean> {
-    let query = this.db(this.tableName).where({ username });
 
     if (excludeId) {
       query = query.andWhere('id', '!=', excludeId);
@@ -78,18 +57,14 @@ export class UserModel extends BaseModel<User> {
       throw new Error('Email already exists');
     }
 
-    // Check for existing username
-    if (await this.usernameExists(userData.username)) {
-      throw new Error('Username already exists');
-    }
-
     // Create the user (password should be hashed before calling this method)
     return await this.create({
       email: userData.email,
-      username: userData.username,
-      first_name: userData.first_name,
-      last_name: userData.last_name,
+      full_name: userData.full_name,
+      phone: userData.phone,
+      whatsapp_number: userData.whatsapp_number,
       password_hash: userData.password, // This should be hashed
+      subscription_plan: 'free', // Default to free plan
       is_active: true,
     } as Omit<User, 'id' | 'created_at' | 'updated_at'>);
   }
@@ -97,7 +72,7 @@ export class UserModel extends BaseModel<User> {
   /**
    * Update user with validation
    */
-  async updateUser(id: number, updateData: Partial<User>): Promise<User | null> {
+  async updateUser(id: string, updateData: Partial<User>): Promise<User | null> {
     // Check if user exists
     const existingUser = await this.findById(id);
     if (!existingUser) {
@@ -108,13 +83,6 @@ export class UserModel extends BaseModel<User> {
     if (updateData.email && updateData.email !== existingUser.email) {
       if (await this.emailExists(updateData.email, id)) {
         throw new Error('Email already exists');
-      }
-    }
-
-    // Validate username uniqueness if username is being updated
-    if (updateData.username && updateData.username !== existingUser.username) {
-      if (await this.usernameExists(updateData.username, id)) {
-        throw new Error('Username already exists');
       }
     }
 
@@ -131,21 +99,21 @@ export class UserModel extends BaseModel<User> {
   /**
    * Update last login timestamp
    */
-  async updateLastLogin(id: number): Promise<User | null> {
+  async updateLastLogin(id: string): Promise<User | null> {
     return await this.update(id, { last_login: new Date() });
   }
 
   /**
    * Deactivate user instead of deleting
    */
-  async deactivateUser(id: number): Promise<User | null> {
+  async deactivateUser(id: string): Promise<User | null> {
     return await this.update(id, { is_active: false });
   }
 
   /**
    * Activate user
    */
-  async activateUser(id: number): Promise<User | null> {
+  async activateUser(id: string): Promise<User | null> {
     return await this.update(id, { is_active: true });
   }
 
@@ -188,5 +156,27 @@ export class UserModel extends BaseModel<User> {
       inactive,
       recentlyCreated,
     };
+  }
+
+  /**
+   * Find user by ID (overriding base method to handle UUID)
+   */
+  async findById(id: string): Promise<User | null> {
+    return await this.db(this.tableName).where({ id }).first();
+  }
+
+  /**
+   * Update user by ID (overriding base method to handle UUID)
+   */
+  async update(id: string, updateData: Partial<User>): Promise<User | null> {
+    const [updatedUser] = await this.db(this.tableName)
+      .where({ id })
+      .update({
+        ...updateData,
+        updated_at: new Date(),
+      })
+      .returning('*');
+
+    return updatedUser || null;
   }
 }

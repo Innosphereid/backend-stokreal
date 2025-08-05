@@ -35,15 +35,15 @@ export class UserController {
       return;
     }
 
-    const userId = parseInt(id, 10);
-
-    if (isNaN(userId)) {
-      const errorResponse = createErrorResponse('Invalid user ID');
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(id)) {
+      const errorResponse = createErrorResponse('Invalid user ID format');
       res.status(400).json(errorResponse);
       return;
     }
 
-    const user = await this.userService.getUserById(userId);
+    const user = await this.userService.getUserById(id);
 
     if (!user) {
       const errorResponse = createErrorResponse('User not found');
@@ -74,15 +74,15 @@ export class UserController {
       return;
     }
 
-    const userId = parseInt(id, 10);
-
-    if (isNaN(userId)) {
-      const errorResponse = createErrorResponse('Invalid user ID');
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(id)) {
+      const errorResponse = createErrorResponse('Invalid user ID format');
       res.status(400).json(errorResponse);
       return;
     }
 
-    const user = await this.userService.updateUser(userId, updateData);
+    const user = await this.userService.updateUser(id, updateData);
 
     if (!user) {
       const errorResponse = createErrorResponse('User not found');
@@ -104,15 +104,15 @@ export class UserController {
       return;
     }
 
-    const userId = parseInt(id, 10);
-
-    if (isNaN(userId)) {
-      const errorResponse = createErrorResponse('Invalid user ID');
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(id)) {
+      const errorResponse = createErrorResponse('Invalid user ID format');
       res.status(400).json(errorResponse);
       return;
     }
 
-    const deleted = await this.userService.deleteUser(userId);
+    const deleted = await this.userService.deleteUser(id);
 
     if (!deleted) {
       const errorResponse = createErrorResponse('User not found');

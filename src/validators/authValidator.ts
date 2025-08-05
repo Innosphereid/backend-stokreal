@@ -12,16 +12,8 @@ export class AuthValidator {
       errors.push({ field: 'email', message: 'Email is required' });
     }
 
-    if (!data.username) {
-      errors.push({ field: 'username', message: 'Username is required' });
-    }
-
-    if (!data.first_name) {
-      errors.push({ field: 'first_name', message: 'First name is required' });
-    }
-
-    if (!data.last_name) {
-      errors.push({ field: 'last_name', message: 'Last name is required' });
+    if (!data.full_name) {
+      errors.push({ field: 'full_name', message: 'Full name is required' });
     }
 
     if (!data.password) {
@@ -49,44 +41,41 @@ export class AuthValidator {
       }
     }
 
-    // Validate first name (only if first_name exists)
-    if (data.first_name) {
-      if (data.first_name.length < 1) {
-        errors.push({ field: 'first_name', message: 'First name cannot be empty' });
+    // Validate full name (only if full_name exists)
+    if (data.full_name) {
+      if (data.full_name.length < 2) {
+        errors.push({ field: 'full_name', message: 'Full name must be at least 2 characters long' });
       }
 
-      if (data.first_name.length > 50) {
-        errors.push({ field: 'first_name', message: 'First name must be less than 50 characters' });
-      }
-    }
-
-    // Validate last name (only if last_name exists)
-    if (data.last_name) {
-      if (data.last_name.length < 1) {
-        errors.push({ field: 'last_name', message: 'Last name cannot be empty' });
-      }
-
-      if (data.last_name.length > 50) {
-        errors.push({ field: 'last_name', message: 'Last name must be less than 50 characters' });
+      if (data.full_name.length > 255) {
+        errors.push({ field: 'full_name', message: 'Full name must be less than 255 characters' });
       }
     }
 
-    // Validate username format and length (only if username exists)
-    if (data.username) {
-      const usernameRegex = /^[a-zA-Z0-9_]+$/;
-      if (!usernameRegex.test(data.username)) {
-        errors.push({
-          field: 'username',
-          message: 'Username can only contain letters, numbers, and underscores',
+    // Validate phone number (optional)
+    if (data.phone) {
+      const phoneRegex = /^[\d\s\-\+\(\)]+$/;
+      if (!phoneRegex.test(data.phone)) {
+        errors.push({ field: 'phone', message: 'Invalid phone number format' });
+      }
+
+      if (data.phone.length > 20) {
+        errors.push({ field: 'phone', message: 'Phone number must be less than 20 characters' });
+      }
+    }
+
+    // Validate WhatsApp number (optional) - Indonesian format
+    if (data.whatsapp_number) {
+      const whatsappRegex = /^(\+62|62|0)8[1-9][0-9]{6,9}$/;
+      if (!whatsappRegex.test(data.whatsapp_number)) {
+        errors.push({ 
+          field: 'whatsapp_number', 
+          message: 'WhatsApp number must be in Indonesian format (+62xxx or 08xxx)' 
         });
       }
 
-      if (data.username.length < 3) {
-        errors.push({ field: 'username', message: 'Username must be at least 3 characters long' });
-      }
-
-      if (data.username.length > 30) {
-        errors.push({ field: 'username', message: 'Username must be less than 30 characters' });
+      if (data.whatsapp_number.length > 20) {
+        errors.push({ field: 'whatsapp_number', message: 'WhatsApp number must be less than 20 characters' });
       }
     }
 
@@ -128,9 +117,9 @@ export class AuthValidator {
   static sanitizeRegisterData(data: any): RegisterRequest {
     return {
       email: data.email?.trim()?.toLowerCase() || data.email,
-      username: data.username?.trim()?.toLowerCase() || data.username,
-      first_name: data.first_name?.trim() || data.first_name,
-      last_name: data.last_name?.trim() || data.last_name,
+      full_name: data.full_name?.trim() || data.full_name,
+      phone: data.phone?.trim() || data.phone,
+      whatsapp_number: data.whatsapp_number?.trim() || data.whatsapp_number,
       password: data.password,
       confirm_password: data.confirm_password,
     };
