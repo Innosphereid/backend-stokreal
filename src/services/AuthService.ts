@@ -484,8 +484,11 @@ export class AuthService implements AuthServiceInterface {
         throw createError('User not found', 404);
       }
 
-      // Update password
-      await this.userService.updateUser(payload.sub, { password: newPassword });
+      // Hash the new password
+      const hashedPassword = await PasswordUtils.hashPassword(newPassword);
+
+      // Update password using UserService with password_hash field
+      await this.userService.updateUser(payload.sub, { password_hash: hashedPassword });
 
       // Send confirmation email
       try {

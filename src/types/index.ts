@@ -51,6 +51,7 @@ export interface UpdateUserRequest {
   whatsapp_number?: string;
   is_active?: boolean;
   password?: string;
+  password_hash?: string; // Added for direct password hash updates
   last_login?: Date;
   subscription_plan?: 'free' | 'premium';
   subscription_expires_at?: Date;
