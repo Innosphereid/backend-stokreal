@@ -27,12 +27,12 @@ export interface User extends DatabaseRecord {
   email: string;
   password_hash: string;
   full_name: string;
-  phone?: string;
-  whatsapp_number?: string;
+  phone?: string | undefined;
+  whatsapp_number?: string | undefined;
   subscription_plan: 'free' | 'premium';
-  subscription_expires_at?: Date;
+  subscription_expires_at?: Date | undefined;
   is_active: boolean;
-  last_login?: Date;
+  last_login?: Date | undefined;
 }
 
 export interface CreateUserRequest {

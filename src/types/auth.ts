@@ -12,8 +12,8 @@ export interface RegisterResponse {
     id: string;
     email: string;
     full_name: string;
-    phone?: string;
-    whatsapp_number?: string;
+    phone?: string | undefined;
+    whatsapp_number?: string | undefined;
     subscription_plan: 'free' | 'premium';
     is_active: boolean;
     created_at: Date;
@@ -33,7 +33,7 @@ export interface LoginResponse {
     email: string;
     full_name: string;
     subscription_plan: 'free' | 'premium';
-    subscription_expires_at?: Date;
+    subscription_expires_at?: Date | undefined;
   };
   tokens: {
     access_token: string;

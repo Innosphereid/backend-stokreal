@@ -181,7 +181,7 @@ export class AuthService implements AuthServiceInterface {
       logger.info(`Generating ${purpose} token for user: ${userId}`);
 
       // Verify user exists
-      const user = await this.userService.getUserById(parseInt(userId, 10));
+      const user = await this.userService.getUserById(userId);
       if (!user) {
         throw createError('User not found', 404);
       }
@@ -246,13 +246,13 @@ export class AuthService implements AuthServiceInterface {
       const payload = JWTUtils.verifyToken(token, 'access');
 
       // Get full user information from database
-      const user = await this.userService.getUserById(parseInt(payload.sub, 10));
+      const user = await this.userService.getUserById(payload.sub);
       if (!user) {
         return null;
       }
 
       return {
-        id: user.id.toString(),
+        id: user.id,
         email: user.email,
         role: 'user', // Default role, can be extended
         isActive: user.is_active,
@@ -278,7 +278,7 @@ export class AuthService implements AuthServiceInterface {
       logger.info(`Password change attempt for user: ${userId}`);
 
       // Get user from database first to get email
-      const user = await this.userService.getUserById(parseInt(userId, 10));
+      const user = await this.userService.getUserById(userId);
       if (!user) {
         throw createError('User not found', 404);
       }
@@ -299,7 +299,7 @@ export class AuthService implements AuthServiceInterface {
       }
 
       // Update password using UserService
-      await this.userService.updateUser(parseInt(userId, 10), { password: newPassword });
+      await this.userService.updateUser(userId, { password: newPassword });
 
       logger.info(`Password changed successfully for user ${userId}`);
     } catch (error) {
@@ -324,7 +324,7 @@ export class AuthService implements AuthServiceInterface {
       const payload = await this.verifyToken(token, 'password_reset');
 
       // Update password
-      await this.userService.updateUser(parseInt(payload.sub, 10), { password: newPassword });
+      await this.userService.updateUser(payload.sub, { password: newPassword });
 
       logger.info(`Password reset successfully for user ${payload.sub}`);
     } catch (error) {
@@ -416,7 +416,7 @@ export class AuthService implements AuthServiceInterface {
    */
   async userHasRole(userId: string, role: string): Promise<boolean> {
     try {
-      const user = await this.userService.getUserById(parseInt(userId, 10));
+      const user = await this.userService.getUserById(userId);
       if (!user) {
         return false;
       }

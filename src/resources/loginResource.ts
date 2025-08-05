@@ -13,7 +13,7 @@ export class LoginResource {
         email: user.email,
         full_name: user.full_name,
         subscription_plan: user.subscription_plan,
-        subscription_expires_at: user.subscription_expires_at,
+        subscription_expires_at: user.subscription_expires_at || undefined,
       },
       tokens: {
         access_token: loginData.tokens.accessToken,
