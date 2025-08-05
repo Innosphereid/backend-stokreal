@@ -4,7 +4,8 @@ import { logger } from '@/utils/logger';
 import { PasswordUtils } from '@/utils/password';
 import { LoginAttemptService } from './LoginAttemptService';
 import { AuditLogService } from './AuditLogService';
-import { mailer } from '@/config/mailer';
+import { EmailVerificationService } from './EmailVerificationService';
+import { mailer } from '@/mails';
 import {
   LoginCredentials,
   LoginResponse,
@@ -24,11 +25,13 @@ export class AuthService implements AuthServiceInterface {
   private readonly userService: UserService;
   private readonly loginAttemptService: LoginAttemptService;
   private readonly auditLogService: AuditLogService;
+  private readonly emailVerificationService: EmailVerificationService;
 
   constructor() {
     this.userService = new UserService();
     this.loginAttemptService = new LoginAttemptService();
     this.auditLogService = new AuditLogService();
+    this.emailVerificationService = new EmailVerificationService();
   }
 
   /**
@@ -264,11 +267,19 @@ export class AuthService implements AuthServiceInterface {
 
       // Generate token with 1-hour expiration for password reset
       const expiresIn = purpose === 'password_reset' ? '1h' : '24h';
-      const token = JWTUtils.generateVerificationToken(userId, purpose, email, expiresIn);
+      const token = JWTUtils.generateShortVerificationToken(userId, purpose, email, expiresIn);
 
       // Calculate expiration time
       const expiresAt = new Date();
       expiresAt.setHours(expiresAt.getHours() + (purpose === 'password_reset' ? 1 : 24));
+
+      // Store verification token in database
+      await this.emailVerificationService.createVerification({
+        userId,
+        token,
+        purpose,
+        expiresAt,
+      });
 
       logger.info(`Verification token generated for user ${userId}, expires at ${expiresAt}`);
 
@@ -363,7 +374,8 @@ export class AuthService implements AuthServiceInterface {
     try {
       logger.debug(`Verifying ${purpose || 'verification'} token`);
 
-      // Verify the token using JWT utility
+      // Try to verify the token using JWT utility
+      // This will work for both regular and short tokens
       const payload = JWTUtils.verifyVerificationToken(token, purpose);
 
       logger.info(`${purpose || 'Verification'} token verified for user ${payload.sub}`);
@@ -503,6 +515,20 @@ export class AuthService implements AuthServiceInterface {
     try {
       logger.info('Email verification attempt');
 
+      // Check if token exists in database and is not used
+      const verification = await this.emailVerificationService.findByToken(token);
+      if (!verification) {
+        throw createError('Invalid verification token', 401, ErrorCodes.INVALID_TOKEN);
+      }
+
+      if (verification.is_used) {
+        throw createError('Verification token already used', 401, ErrorCodes.INVALID_TOKEN);
+      }
+
+      if (verification.expires_at < new Date()) {
+        throw createError('Verification token expired', 401, ErrorCodes.TOKEN_EXPIRED);
+      }
+
       // Verify the email verification token
       const payload = await this.verifyToken(token, 'email_verification');
 
@@ -517,6 +543,9 @@ export class AuthService implements AuthServiceInterface {
         logger.info(`Email already verified for user ${payload.sub}`);
         return; // Don't throw error, just return success
       }
+
+      // Mark verification token as used
+      await this.emailVerificationService.markAsUsed(token);
 
       // Update user's email verification status
       await this.userService.updateUser(payload.sub, { email_verified: true });

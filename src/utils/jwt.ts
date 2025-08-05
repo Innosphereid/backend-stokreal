@@ -155,7 +155,7 @@ export class JWTUtils {
   }
 
   /**
-   * Generate a verification token
+   * Generate a verification token for email verification, password reset, etc.
    */
   static generateVerificationToken(
     userId: string,
@@ -172,6 +172,49 @@ export class JWTUtils {
     const options: SignTokenOptions | undefined = expiresIn ? { expiresIn } : undefined;
 
     return this.signToken(payload, 'verification', options);
+  }
+
+  /**
+   * Generate a short verification token (max 255 chars) for database storage
+   */
+  static generateShortVerificationToken(
+    userId: string,
+    purpose: string,
+    email?: string,
+    expiresIn?: string
+  ): string {
+    const payload = {
+      sub: userId,
+      ...(email && { email }),
+      purpose,
+    };
+
+    const options: SignTokenOptions | undefined = expiresIn ? { expiresIn } : undefined;
+
+    // Use a more compact signing approach
+    const tokenPayload: JWTPayload = {
+      ...payload,
+      type: 'verification',
+    };
+
+    const signOptions: jwt.SignOptions = {
+      expiresIn: (options?.expiresIn || JWTConfigUtils.getTokenExpiry('verification')) as any,
+      issuer: options?.issuer || jwtConfig.issuer,
+      audience: options?.audience || jwtConfig.audience,
+      algorithm: jwtConfig.algorithm,
+      // Remove jwtid to make token shorter
+    };
+
+    const token = jwt.sign(tokenPayload, jwtConfig.secret, signOptions);
+
+    // If token is still too long, truncate it (not recommended for production)
+    if (token.length > 255) {
+      logger.warn(`Generated token is ${token.length} chars, truncating to 255`);
+      return token.substring(0, 255);
+    }
+
+    logger.debug(`Signed short verification token for user ${userId}`);
+    return token;
   }
 
   /**

@@ -81,6 +81,9 @@ export class MailerService {
           buffer: true,
         });
       }
+
+      // If MAIL_LOG_ONLY is not set or is false, use actual SMTP
+      // This allows real email sending in development
     }
 
     // Create SMTP transporter with proper configuration
@@ -137,6 +140,7 @@ export class MailerService {
         return { messageId: 'dev-mode-' + Date.now() };
       }
 
+      // Send actual email (both production and development when MAIL_LOG_ONLY is not true)
       const result = await this.transporter.sendMail(mailOptions);
       logger.info(`Email sent successfully to ${mailOptions.to}`, { messageId: result.messageId });
       return result;
