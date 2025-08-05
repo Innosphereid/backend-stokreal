@@ -147,25 +147,70 @@ export class AuthController {
   });
 
   /**
-   * Refresh JWT tokens
+   * Refresh access token using refresh token
    */
   refreshTokens = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     logger.info('Token refresh request received');
 
-    const { refresh_token } = req.body;
+    const { refreshToken } = req.body;
 
-    if (!refresh_token) {
+    if (!refreshToken) {
       res.status(400).json({ error: 'Refresh token is required' });
       return;
     }
 
-    // Refresh tokens
-    const refreshData = await this.authService.refreshTokens(refresh_token);
+    const tokens = await this.authService.refreshTokens(refreshToken);
 
-    const successResponse = createSuccessResponse('Tokens refreshed successfully', refreshData);
+    res.status(200).json({
+      message: 'Tokens refreshed successfully',
+      data: tokens,
+    });
+  });
 
-    logger.info('Tokens refreshed successfully');
+  /**
+   * Forgot password - send reset email
+   */
+  forgotPassword = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    logger.info('Forgot password request received');
 
-    res.status(200).json(successResponse);
+    const { email } = req.body;
+
+    if (!email) {
+      res.status(400).json({ error: 'Email is required' });
+      return;
+    }
+
+    // Get client IP for rate limiting
+    const clientIp = this.getClientIp(req);
+
+    // Send password reset email
+    await this.authService.forgotPassword(email, clientIp);
+
+    res.status(200).json({
+      message: 'If an account with that email exists, a password reset link has been sent.',
+      data: null,
+    });
+  });
+
+  /**
+   * Reset password using token
+   */
+  resetPassword = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    logger.info('Reset password request received');
+
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      res.status(400).json({ error: 'Token and new password are required' });
+      return;
+    }
+
+    // Reset password
+    await this.authService.resetPassword(token, newPassword);
+
+    res.status(200).json({
+      message: 'Password has been reset successfully. You can now login with your new password.',
+      data: null,
+    });
   });
 }

@@ -253,38 +253,99 @@ export class AuthService implements AuthServiceInterface {
     try {
       const { userId, purpose, email } = request;
 
-      logger.info(`Generating ${purpose} token for user: ${userId}`);
+      logger.info(`Generating verification token for user ${userId}, purpose: ${purpose}`);
 
-      // Verify user exists
-      const user = await this.userService.getUserById(userId);
-      if (!user) {
-        throw createError('User not found', 404);
-      }
-
-      // Generate verification token
-      const token = JWTUtils.generateVerificationToken(userId, purpose, email || user.email);
+      // Generate token with 1-hour expiration for password reset
+      const expiresIn = purpose === 'password_reset' ? '1h' : '24h';
+      const token = JWTUtils.generateVerificationToken(userId, purpose, email, expiresIn);
 
       // Calculate expiration time
-      const expirationTime = JWTUtils.getTokenExpiration(token);
-      if (!expirationTime) {
-        throw createError('Failed to determine token expiration', 500);
-      }
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + (purpose === 'password_reset' ? 1 : 24));
 
-      logger.info(`Generated ${purpose} token for user ${userId}`);
+      logger.info(`Verification token generated for user ${userId}, expires at ${expiresAt}`);
 
       return {
         token,
-        expiresAt: expirationTime,
-        message: `${purpose} token generated successfully`,
+        expiresAt,
+        message: 'Verification token generated successfully',
       };
     } catch (error) {
-      logger.error('Verification token generation failed:', error);
+      logger.error('Failed to generate verification token:', error);
+      throw createError(
+        'Failed to generate verification token',
+        500,
+        ErrorCodes.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
 
-      if (error instanceof Error && 'statusCode' in error) {
+  /**
+   * Forgot password - send reset email with rate limiting
+   */
+  async forgotPassword(email: string, clientIp: string): Promise<void> {
+    try {
+      logger.info(`Forgot password request for email: ${email}, IP: ${clientIp}`);
+
+      // Check rate limiting for password reset requests
+      if (await this.loginAttemptService.isEmailBlocked(email)) {
+        logger.warn(`Password reset blocked for email: ${email} due to rate limiting`);
+        // Don't reveal if email exists or not for security
+        return;
+      }
+
+      // Find user by email
+      const user = await this.userService.getUserByEmail(email);
+      if (!user) {
+        logger.info(`Password reset requested for non-existent email: ${email}`);
+        // Don't reveal if email exists or not for security
+        return;
+      }
+
+      // Check if user is active
+      if (!user.is_active) {
+        logger.warn(`Password reset requested for inactive user: ${user.id}`);
+        // Don't reveal if email exists or not for security
+        return;
+      }
+
+      // Generate password reset token
+      const resetToken = await this.generateVerificationToken({
+        userId: user.id,
+        purpose: 'password_reset',
+        email: user.email,
+      });
+
+      // Send password reset email
+      try {
+        await mailer.sendPasswordResetEmail(user.email, user.full_name, resetToken.token);
+        logger.info(`Password reset email sent to ${user.email}`);
+
+        // Record the attempt (successful)
+        await this.loginAttemptService.recordAttempt({
+          userId: user.id,
+          email,
+          ipAddress: clientIp,
+          success: true,
+        });
+      } catch (emailError) {
+        logger.error('Failed to send password reset email:', emailError);
+        throw createError('Failed to send password reset email', 500, ErrorCodes.EMAIL_SEND_FAILED);
+      }
+    } catch (error) {
+      logger.error('Forgot password failed:', error);
+
+      // Re-throw AppError instances as they are already properly formatted
+      if (error instanceof Error && 'statusCode' in error && 'errorCode' in error) {
         throw error;
       }
 
-      throw createError('Verification token generation failed', 500);
+      // For other errors, throw a generic error
+      throw createError(
+        'Failed to process password reset request',
+        500,
+        ErrorCodes.INTERNAL_SERVER_ERROR
+      );
     }
   }
 
@@ -398,8 +459,23 @@ export class AuthService implements AuthServiceInterface {
       // Verify the reset token
       const payload = await this.verifyToken(token, 'password_reset');
 
+      // Get user details for confirmation email
+      const user = await this.userService.getUserById(payload.sub);
+      if (!user) {
+        throw createError('User not found', 404);
+      }
+
       // Update password
       await this.userService.updateUser(payload.sub, { password: newPassword });
+
+      // Send confirmation email
+      try {
+        await mailer.sendPasswordResetConfirmationEmail(user.email, user.full_name);
+        logger.info(`Password reset confirmation email sent to ${user.email}`);
+      } catch (emailError) {
+        logger.error('Failed to send password reset confirmation email:', emailError);
+        // Don't fail the password reset if email fails
+      }
 
       logger.info(`Password reset successfully for user ${payload.sub}`);
     } catch (error) {

@@ -1,7 +1,11 @@
 import { Router } from 'express';
 import { AuthController } from '@/controllers/AuthController';
-import { registrationRateLimiter, loginRateLimiter } from '@/middleware/rateLimiter';
-import { registrationSanitizer, loginSanitizer } from '@/middleware/inputSanitizer';
+import {
+  registrationRateLimiter,
+  loginRateLimiter,
+  passwordResetRateLimiter,
+} from '@/middleware/rateLimiter';
+import { registrationSanitizer, loginSanitizer, inputSanitizer } from '@/middleware/inputSanitizer';
 
 const router = Router();
 const authController = new AuthController();
@@ -392,5 +396,133 @@ router.post('/logout', authController.logout);
  *                   type: string
  */
 router.post('/refresh', authController.refreshTokens);
+
+/**
+ * @swagger
+ * /auth/forgot-password:
+ *   post:
+ *     summary: Request password reset
+ *     tags: [Authentication]
+ *     description: Send a password reset email to the user's email address
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 description: User's email address
+ *           example:
+ *             email: "user@example.com"
+ *     responses:
+ *       200:
+ *         description: Password reset email sent (if email exists)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "If an account with that email exists, a password reset link has been sent."
+ *                 data:
+ *                   type: null
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       429:
+ *         description: Rate limit exceeded
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.post(
+  '/forgot-password',
+  passwordResetRateLimiter,
+  inputSanitizer,
+  authController.forgotPassword
+);
+
+/**
+ * @swagger
+ * /auth/reset-password:
+ *   post:
+ *     summary: Reset password using token
+ *     tags: [Authentication]
+ *     description: Reset user password using the token from the reset email
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - token
+ *               - newPassword
+ *             properties:
+ *               token:
+ *                 type: string
+ *                 description: Password reset token from email
+ *               newPassword:
+ *                 type: string
+ *                 minLength: 8
+ *                 description: New password (min 8 chars, uppercase, lowercase, number)
+ *           example:
+ *             token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+ *             newPassword: "NewSecurePass123"
+ *     responses:
+ *       200:
+ *         description: Password reset successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Password has been reset successfully. You can now login with your new password."
+ *                 data:
+ *                   type: null
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *       400:
+ *         description: Validation error or invalid token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Invalid or expired token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.post('/reset-password', inputSanitizer, authController.resetPassword);
 
 export default router;
