@@ -2,6 +2,8 @@ import { UserService } from './UserService';
 import { JWTUtils } from '@/utils/jwt';
 import { logger } from '@/utils/logger';
 import { PasswordUtils } from '@/utils/password';
+import { LoginAttemptService } from './LoginAttemptService';
+import { mailer } from '@/config/mailer';
 import {
   LoginCredentials,
   LoginResponse,
@@ -19,13 +21,15 @@ import { ErrorCodes } from '@/types/errors';
 
 export class AuthService implements AuthServiceInterface {
   private readonly userService: UserService;
+  private readonly loginAttemptService: LoginAttemptService;
 
   constructor() {
     this.userService = new UserService();
+    this.loginAttemptService = new LoginAttemptService();
   }
 
   /**
-   * Register a new user
+   * Register a new user with email verification
    */
   async register(userData: CreateUserRequest): Promise<User> {
     try {
@@ -43,6 +47,22 @@ export class AuthService implements AuthServiceInterface {
 
       // Create user using UserService
       const newUser = await this.userService.createUser(userData);
+
+      // Generate email verification token
+      const verificationToken = await this.generateVerificationToken({
+        userId: newUser.id,
+        purpose: 'email_verification',
+        email: newUser.email,
+      });
+
+      // Send welcome email with verification token
+      try {
+        await mailer.sendWelcomeEmail(newUser.email, newUser.full_name, verificationToken.token);
+        logger.info(`Welcome email sent to ${newUser.email}`);
+      } catch (emailError) {
+        logger.error('Failed to send welcome email:', emailError);
+        // Don't fail registration if email fails
+      }
 
       logger.info(`User ${newUser.id} registered successfully`);
 
@@ -65,24 +85,70 @@ export class AuthService implements AuthServiceInterface {
   }
 
   /**
-   * Authenticate user and generate JWT tokens
+   * Authenticate user and generate JWT tokens with enhanced security
    */
-  async login(credentials: LoginCredentials): Promise<LoginResponse> {
+  async login(credentials: LoginCredentials, clientIp?: string): Promise<LoginResponse> {
     try {
       const { email, password } = credentials;
 
       logger.info(`Login attempt for email: ${email}`);
 
+      // Get client IP for rate limiting
+      const ip = clientIp || this.getClientIp();
+
+      // Check if IP is blocked
+      if (await this.loginAttemptService.isIpBlocked(ip)) {
+        throw createError(
+          'Too many failed login attempts from this IP. Please try again later.',
+          429,
+          ErrorCodes.RATE_LIMIT_EXCEEDED
+        );
+      }
+
+      // Check if email is blocked
+      if (await this.loginAttemptService.isEmailBlocked(email)) {
+        throw createError(
+          'Too many failed login attempts for this email. Please try again later.',
+          429,
+          ErrorCodes.RATE_LIMIT_EXCEEDED
+        );
+      }
+
       // Validate user credentials using existing UserService
       const user = await this.validateUserCredentials(email, password);
 
       if (!user) {
+        // Record failed attempt
+        await this.loginAttemptService.recordAttempt({
+          email,
+          ipAddress: ip,
+          success: false,
+          failureReason: 'Invalid credentials',
+        });
+
         throw createError('Invalid email or password', 401, ErrorCodes.INVALID_CREDENTIALS);
       }
 
       if (!user.is_active) {
+        // Record failed attempt
+        await this.loginAttemptService.recordAttempt({
+          userId: user.id,
+          email,
+          ipAddress: ip,
+          success: false,
+          failureReason: 'Account deactivated',
+        });
+
         throw createError('Account is deactivated', 401, ErrorCodes.UNAUTHORIZED);
       }
+
+      // Record successful attempt
+      await this.loginAttemptService.recordAttempt({
+        userId: user.id,
+        email,
+        ipAddress: ip,
+        success: true,
+      });
 
       // Create JWT user object
       const jwtUser: JWTUser = {
@@ -121,6 +187,15 @@ export class AuthService implements AuthServiceInterface {
 
       throw createError('Login failed', 500, ErrorCodes.INTERNAL_SERVER_ERROR);
     }
+  }
+
+  /**
+   * Get client IP address
+   */
+  private getClientIp(): string {
+    // This should be called from a request context
+    // For now, return a placeholder
+    return 'unknown';
   }
 
   /**
