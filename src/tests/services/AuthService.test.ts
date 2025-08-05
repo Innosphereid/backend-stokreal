@@ -378,7 +378,7 @@ describe('AuthService', () => {
       });
 
       await expect(authService.resetPassword(token, newPassword)).rejects.toThrow(
-        'Password reset failed'
+        'Token verification failed'
       );
     });
 
