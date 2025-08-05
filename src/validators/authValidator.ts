@@ -4,7 +4,7 @@ export class AuthValidator {
   /**
    * Validate registration request
    */
-  static validateRegisterRequest(data: any): ValidationResult {
+  static validateRegisterRequest(data: RegisterRequest): ValidationResult {
     const errors: ValidationError[] = [];
 
     // Check if all required fields are present
@@ -44,7 +44,10 @@ export class AuthValidator {
     // Validate full name (only if full_name exists)
     if (data.full_name) {
       if (data.full_name.length < 2) {
-        errors.push({ field: 'full_name', message: 'Full name must be at least 2 characters long' });
+        errors.push({
+          field: 'full_name',
+          message: 'Full name must be at least 2 characters long',
+        });
       }
 
       if (data.full_name.length > 255) {
@@ -54,7 +57,7 @@ export class AuthValidator {
 
     // Validate phone number (optional)
     if (data.phone) {
-      const phoneRegex = /^[\d\s\-\+\(\)]+$/;
+      const phoneRegex = /^[\d\s\-+()]+$/;
       if (!phoneRegex.test(data.phone)) {
         errors.push({ field: 'phone', message: 'Invalid phone number format' });
       }
@@ -68,14 +71,17 @@ export class AuthValidator {
     if (data.whatsapp_number) {
       const whatsappRegex = /^(\+62|62|0)8[1-9][0-9]{6,9}$/;
       if (!whatsappRegex.test(data.whatsapp_number)) {
-        errors.push({ 
-          field: 'whatsapp_number', 
-          message: 'WhatsApp number must be in Indonesian format (+62xxx or 08xxx)' 
+        errors.push({
+          field: 'whatsapp_number',
+          message: 'WhatsApp number must be in Indonesian format (+62xxx or 08xxx)',
         });
       }
 
       if (data.whatsapp_number.length > 20) {
-        errors.push({ field: 'whatsapp_number', message: 'WhatsApp number must be less than 20 characters' });
+        errors.push({
+          field: 'whatsapp_number',
+          message: 'WhatsApp number must be less than 20 characters',
+        });
       }
     }
 
@@ -114,14 +120,14 @@ export class AuthValidator {
   /**
    * Sanitize registration data
    */
-  static sanitizeRegisterData(data: any): RegisterRequest {
+  static sanitizeRegisterData(data: Record<string, unknown>): RegisterRequest {
     return {
-      email: data.email?.trim()?.toLowerCase() || data.email,
-      full_name: data.full_name?.trim() || data.full_name,
-      phone: data.phone?.trim() || data.phone,
-      whatsapp_number: data.whatsapp_number?.trim() || data.whatsapp_number,
-      password: data.password,
-      confirm_password: data.confirm_password,
+      email: (data.email as string)?.trim()?.toLowerCase() || (data.email as string),
+      full_name: (data.full_name as string)?.trim() || (data.full_name as string),
+      phone: (data.phone as string)?.trim() || (data.phone as string),
+      whatsapp_number: (data.whatsapp_number as string)?.trim() || (data.whatsapp_number as string),
+      password: data.password as string,
+      confirm_password: data.confirm_password as string,
     };
   }
 }

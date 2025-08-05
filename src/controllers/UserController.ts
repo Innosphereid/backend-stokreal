@@ -5,7 +5,7 @@ import { UserService } from '@/services/UserService';
 import { CreateUserRequest, UpdateUserRequest, QueryParams } from '@/types';
 
 export class UserController {
-  private userService: UserService;
+  private readonly userService: UserService;
 
   constructor() {
     this.userService = new UserService();

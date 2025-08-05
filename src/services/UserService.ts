@@ -11,7 +11,7 @@ import { UserModel } from '@/models';
 import { PasswordUtils } from '@/utils/password';
 
 export class UserService {
-  private userModel: UserModel;
+  private readonly userModel: UserModel;
 
   constructor() {
     this.userModel = new UserModel();

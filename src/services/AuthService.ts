@@ -18,7 +18,7 @@ import { createResourceConflictError, createError } from '@/utils/errors';
 import { ErrorCodes } from '@/types/errors';
 
 export class AuthService implements AuthServiceInterface {
-  private userService: UserService;
+  private readonly userService: UserService;
 
   constructor() {
     this.userService = new UserService();

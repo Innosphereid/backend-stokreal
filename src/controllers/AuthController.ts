@@ -10,7 +10,7 @@ import { logger } from '@/utils/logger';
 import { formatValidationErrorResponse } from '@/utils/errors';
 
 export class AuthController {
-  private authService: AuthService;
+  private readonly authService: AuthService;
 
   constructor() {
     this.authService = new AuthService();

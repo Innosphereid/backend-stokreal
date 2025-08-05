@@ -141,6 +141,7 @@ export abstract class BaseModel<T extends DatabaseRecord> {
   protected applySearch(query: Knex.QueryBuilder, search: string): Knex.QueryBuilder {
     // Default implementation - child classes should override this
     // search parameter is intentionally unused in default implementation
+    void search; // Suppress unused parameter warning
     return query;
   }
 
