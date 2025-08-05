@@ -3,6 +3,8 @@ import { asyncHandler } from '@/middleware/errorHandler';
 import { createSuccessResponse, createErrorResponse } from '@/utils/response';
 import { UserService } from '@/services/UserService';
 import { CreateUserRequest, UpdateUserRequest, QueryParams } from '@/types';
+import { AuthenticatedRequest } from '@/types/jwt';
+import { ProfileValidator } from '@/validators/profileValidator';
 
 export class UserController {
   private readonly userService: UserService;
@@ -10,6 +12,78 @@ export class UserController {
   constructor() {
     this.userService = new UserService();
   }
+
+  // Get current user profile (authenticated user)
+  getProfile = asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    if (!req.user) {
+      const errorResponse = createErrorResponse('Authentication required');
+      res.status(401).json(errorResponse);
+      return;
+    }
+
+    const user = await this.userService.getUserById(req.user.id);
+
+    if (!user) {
+      const errorResponse = createErrorResponse('User not found');
+      res.status(404).json(errorResponse);
+      return;
+    }
+
+    // Remove sensitive fields from response
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { password_hash, ...userProfile } = user;
+
+    const response = createSuccessResponse('Profile retrieved successfully', userProfile);
+    res.status(200).json(response);
+  });
+
+  // Update current user profile (authenticated user)
+  updateProfile = asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    if (!req.user) {
+      const errorResponse = createErrorResponse('Authentication required');
+      res.status(401).json(errorResponse);
+      return;
+    }
+
+    const updateData: UpdateUserRequest = req.body;
+
+    // Validate profile update data
+    const validation = ProfileValidator.validateProfileUpdate(updateData);
+
+    if (!validation.isValid) {
+      const errorResponse = createErrorResponse('Validation failed', validation.errors.join(', '));
+      res.status(400).json(errorResponse);
+      return;
+    }
+
+    // Use sanitized data for update
+    const sanitizedData = validation.sanitizedData!;
+
+    // Only allow updating specific fields for profile updates
+    const allowedFields = ['full_name', 'phone', 'whatsapp_number'] as const;
+    const filteredData: Partial<UpdateUserRequest> = {};
+
+    for (const field of allowedFields) {
+      if (sanitizedData[field] !== undefined) {
+        (filteredData as any)[field] = sanitizedData[field];
+      }
+    }
+
+    const user = await this.userService.updateUser(req.user.id, filteredData);
+
+    if (!user) {
+      const errorResponse = createErrorResponse('User not found');
+      res.status(404).json(errorResponse);
+      return;
+    }
+
+    // Remove sensitive fields from response
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { password_hash, ...userProfile } = user;
+
+    const response = createSuccessResponse('Profile updated successfully', userProfile);
+    res.status(200).json(response);
+  });
 
   // Get all users with pagination
   getUsers = asyncHandler(async (req: Request, res: Response): Promise<void> => {
