@@ -267,7 +267,7 @@ export class AuthService implements AuthServiceInterface {
 
       // Generate token with 1-hour expiration for password reset
       const expiresIn = purpose === 'password_reset' ? '1h' : '24h';
-      const token = JWTUtils.generateShortVerificationToken(userId, purpose, email, expiresIn);
+      const token = JWTUtils.generateVerificationToken(userId, purpose, email, expiresIn);
 
       // Calculate expiration time
       const expiresAt = new Date();
@@ -529,10 +529,10 @@ export class AuthService implements AuthServiceInterface {
         throw createError('Verification token expired', 401, ErrorCodes.TOKEN_EXPIRED);
       }
 
-      // Verify the email verification token
+      // Verify the email verification token using JWT
       const payload = await this.verifyToken(token, 'email_verification');
 
-      // Get user details
+      // Get user details from JWT payload
       const user = await this.userService.getUserById(payload.sub);
       if (!user) {
         throw createError('User not found', 404);
