@@ -37,7 +37,7 @@ function sanitizePhone(input: string): string {
     return '';
   }
 
-  return input.trim().replace(/[^\d\s\-\+\(\)]/g, '');
+  return input.trim().replace(/[^\d\s\-+()]/g, '');
 }
 
 /**
@@ -48,7 +48,7 @@ function sanitizeWhatsApp(input: string): string {
     return '';
   }
 
-  return input.trim().replace(/[^\d\s\-\+]/g, '');
+  return input.trim().replace(/[^\d\s\-+]/g, '');
 }
 
 /**
