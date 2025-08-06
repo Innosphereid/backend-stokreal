@@ -3,7 +3,7 @@ import app from '../../index';
 
 describe('Performance Tests', () => {
   const baseUrl = '/api/v1/auth';
-  const maxResponseTime = 1000; // Increased to 1 second for more realistic testing
+  const maxResponseTime = 500; // Maximum allowed response time in ms as per requirement
 
   describe('Response Time Tests', () => {
     it('should respond to health check within 500ms', async () => {
