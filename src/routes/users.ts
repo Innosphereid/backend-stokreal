@@ -8,62 +8,6 @@ const userController = new UserController();
 
 /**
  * @swagger
- * /users/{id}:
- *   get:
- *     summary: Get user by ID
- *     tags: [Users]
- *     description: Retrieve a specific user by their ID
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *         description: User ID
- *     responses:
- *       200:
- *         description: User retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ApiResponse'
- *             example:
- *               message: "User retrieved successfully"
- *               data:
- *                 user:
- *                   id: 1
- *                   email: "user@example.com"
- *                   username: "johndoe"
- *                   first_name: "John"
- *                   last_name: "Doe"
- *                   is_active: true
- *                   last_login: "2024-01-01T00:00:00.000Z"
- *                   created_at: "2024-01-01T00:00:00.000Z"
- *                   updated_at: "2024-01-01T00:00:00.000Z"
- *               timestamp: "2024-01-01T00:00:00.000Z"
- *       400:
- *         description: Invalid user ID
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- *       404:
- *         description: User not found
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- *       500:
- *         description: Internal server error
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- */
-router.get('/:id', userController.getUserById);
-
-/**
- * @swagger
  * /users/profile:
  *   get:
  *     summary: Get current user profile
