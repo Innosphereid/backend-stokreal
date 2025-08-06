@@ -5,6 +5,7 @@ import { UserService } from '@/services/UserService';
 import { CreateUserRequest, UpdateUserRequest, QueryParams } from '@/types';
 import { AuthenticatedRequest } from '@/types/jwt';
 import { ProfileValidator } from '@/validators/profileValidator';
+import { logger } from '@/utils/logger';
 
 export class UserController {
   private readonly userService: UserService;
@@ -87,6 +88,8 @@ export class UserController {
 
   // Get all users with pagination
   getUsers = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    logger.info('Admin users list request received');
+
     const queryParams: QueryParams = {
       page: parseInt(req.query.page as string) || 1,
       limit: parseInt(req.query.limit as string) || 10,
@@ -95,7 +98,15 @@ export class UserController {
       search: req.query.search as string,
     };
 
+    logger.info(
+      `Admin users list request - Page: ${queryParams.page}, Limit: ${queryParams.limit}, Sort: ${queryParams.sort}, Order: ${queryParams.order}${queryParams.search ? `, Search: ${queryParams.search}` : ''}`
+    );
+
     const result = await this.userService.getUsers(queryParams);
+
+    logger.info(
+      `Admin users list retrieved successfully - Total: ${result.meta.total}, Page: ${result.meta.page}, Limit: ${result.meta.limit}`
+    );
     res.status(200).json(result);
   });
 
@@ -103,7 +114,10 @@ export class UserController {
   getUserById = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params;
 
+    logger.info(`Admin user detail request received for user ID: ${id}`);
+
     if (!id) {
+      logger.warn('Admin user detail request failed - User ID is required');
       const errorResponse = createErrorResponse('User ID is required');
       res.status(400).json(errorResponse);
       return;
@@ -112,6 +126,7 @@ export class UserController {
     // Validate UUID format
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(id)) {
+      logger.warn(`Admin user detail request failed - Invalid user ID format: ${id}`);
       const errorResponse = createErrorResponse('Invalid user ID format');
       res.status(400).json(errorResponse);
       return;
@@ -120,6 +135,7 @@ export class UserController {
     const user = await this.userService.getUserById(id);
 
     if (!user) {
+      logger.warn(`Admin user detail request failed - User not found: ${id}`);
       const errorResponse = createErrorResponse('User not found');
       res.status(404).json(errorResponse);
       return;
@@ -142,6 +158,9 @@ export class UserController {
       ...(user.last_login && { last_login: user.last_login }),
     };
 
+    logger.info(
+      `Admin user detail retrieved successfully - User ID: ${user.id}, Email: ${user.email}, Role: ${user.role}`
+    );
     const response = createSuccessResponse('User retrieved successfully', sanitizedUser);
     res.status(200).json(response);
   });
