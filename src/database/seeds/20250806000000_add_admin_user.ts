@@ -6,7 +6,6 @@ export async function seed(knex: Knex): Promise<void> {
   const existingAdmin = await knex('users').where({ email: 'admin@stokreal.com' }).first();
 
   if (existingAdmin) {
-    console.log('Admin user already exists, skipping...');
     return;
   }
 
@@ -28,6 +27,4 @@ export async function seed(knex: Knex): Promise<void> {
     created_at: new Date(),
     updated_at: new Date(),
   });
-
-  console.log('Admin user created successfully');
 }

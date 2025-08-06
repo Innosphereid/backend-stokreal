@@ -98,8 +98,9 @@ export class UserController {
       search: req.query.search as string,
     };
 
+    const searchInfo = queryParams.search ? `, Search: ${queryParams.search}` : '';
     logger.info(
-      `Admin users list request - Page: ${queryParams.page}, Limit: ${queryParams.limit}, Sort: ${queryParams.sort}, Order: ${queryParams.order}${queryParams.search ? `, Search: ${queryParams.search}` : ''}`
+      `Admin users list request - Page: ${queryParams.page}, Limit: ${queryParams.limit}, Sort: ${queryParams.sort}, Order: ${queryParams.order}${searchInfo}`
     );
 
     const result = await this.userService.getUsers(queryParams);
