@@ -1,5 +1,11 @@
 import { Router } from 'express';
 import { AuthController } from '@/controllers/AuthController';
+import {
+  registrationRateLimiter,
+  loginRateLimiter,
+  passwordResetRateLimiter,
+} from '@/middleware/rateLimiter';
+import { registrationSanitizer, loginSanitizer, inputSanitizer } from '@/middleware/inputSanitizer';
 
 const router = Router();
 const authController = new AuthController();
@@ -10,40 +16,85 @@ const authController = new AuthController();
  *   post:
  *     summary: Register a new user
  *     tags: [Authentication]
- *     description: Create a new user account with email, username, and password
+ *     description: Create a new user account with email verification
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/RegisterRequest'
+ *             type: object
+ *             required:
+ *               - email
+ *               - full_name
+ *               - password
+ *               - confirm_password
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 description: User's email address
+ *               full_name:
+ *                 type: string
+ *                 description: User's full name
+ *               phone:
+ *                 type: string
+ *                 description: User's phone number (optional)
+ *               whatsapp_number:
+ *                 type: string
+ *                 description: User's WhatsApp number in Indonesian format (optional)
+ *               password:
+ *                 type: string
+ *                 minLength: 8
+ *                 description: User's password (min 8 chars, uppercase, lowercase, number)
+ *               confirm_password:
+ *                 type: string
+ *                 description: Password confirmation
  *           example:
  *             email: "user@example.com"
- *             username: "johndoe"
- *             first_name: "John"
- *             last_name: "Doe"
- *             password: "securePassword123"
- *             confirm_password: "securePassword123"
+ *             full_name: "John Doe"
+ *             phone: "+6281234567890"
+ *             whatsapp_number: "+6281234567890"
+ *             password: "SecurePass123"
+ *             confirm_password: "SecurePass123"
  *     responses:
  *       201:
  *         description: User registered successfully
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/RegisterResponse'
- *             example:
- *               message: "User registered successfully"
- *               data:
- *                 user:
- *                   id: 1
- *                   email: "user@example.com"
- *                   username: "johndoe"
- *                   first_name: "John"
- *                   last_name: "Doe"
- *                   is_active: true
- *                   created_at: "2024-01-01T00:00:00.000Z"
- *                   updated_at: "2024-01-01T00:00:00.000Z"
- *               timestamp: "2024-01-01T00:00:00.000Z"
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     user:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: string
+ *                         email:
+ *                           type: string
+ *                         full_name:
+ *                           type: string
+ *                         phone:
+ *                           type: string
+ *                         whatsapp_number:
+ *                           type: string
+ *                         subscription_plan:
+ *                           type: string
+ *                           enum: [free, premium]
+ *                         is_active:
+ *                           type: boolean
+ *                         created_at:
+ *                           type: string
+ *                           format: date-time
+ *                         email_verified:
+ *                           type: boolean
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
  *       400:
  *         description: Validation error
  *         content:
@@ -58,29 +109,47 @@ const authController = new AuthController();
  *                 errors:
  *                   type: array
  *                   items:
- *                     $ref: '#/components/schemas/ValidationError'
- *             example:
- *               error: "Validation failed"
- *               message: "Validation failed"
- *               errors:
- *                 - field: "email"
- *                   message: "Email is required"
- *                 - field: "password"
- *                   message: "Password must be at least 8 characters"
+ *                     type: object
+ *                     properties:
+ *                       field:
+ *                         type: string
+ *                       message:
+ *                         type: string
  *       409:
- *         description: User already exists
+ *         description: Email already exists
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                 errorCode:
+ *                   type: string
+ *       429:
+ *         description: Too many registration attempts
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                 errorCode:
+ *                   type: string
+ *                 retryAfter:
+ *                   type: number
  *       500:
  *         description: Internal server error
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
  */
-router.post('/register', authController.register);
+router.post('/register', registrationRateLimiter, registrationSanitizer, authController.register);
 
 /**
  * @swagger
@@ -94,10 +163,24 @@ router.post('/register', authController.register);
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/LoginRequest'
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 description: User's email address
+ *               password:
+ *                 type: string
+ *                 description: User's password
+ *               remember_me:
+ *                 type: boolean
+ *                 description: Remember user session (optional)
  *           example:
  *             email: "user@example.com"
- *             password: "securePassword123"
+ *             password: "SecurePass123"
  *             remember_me: true
  *     responses:
  *       200:
@@ -105,22 +188,40 @@ router.post('/register', authController.register);
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/LoginResponse'
- *             example:
- *               message: "Login successful"
- *               data:
- *                 user:
- *                   id: 1
- *                   email: "user@example.com"
- *                   username: "johndoe"
- *                   first_name: "John"
- *                   last_name: "Doe"
- *                   is_active: true
- *                   last_login: "2024-01-01T00:00:00.000Z"
- *                 tokens:
- *                   access_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
- *                   refresh_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
- *               timestamp: "2024-01-01T00:00:00.000Z"
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     user:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: string
+ *                         email:
+ *                           type: string
+ *                         full_name:
+ *                           type: string
+ *                         subscription_plan:
+ *                           type: string
+ *                           enum: [free, premium]
+ *                         subscription_expires_at:
+ *                           type: string
+ *                           format: date-time
+ *                     tokens:
+ *                       type: object
+ *                       properties:
+ *                         access_token:
+ *                           type: string
+ *                         refresh_token:
+ *                           type: string
+ *                         expires_in:
+ *                           type: number
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
  *       400:
  *         description: Validation error
  *         content:
@@ -135,9 +236,213 @@ router.post('/register', authController.register);
  *                 errors:
  *                   type: array
  *                   items:
- *                     $ref: '#/components/schemas/ValidationError'
+ *                     type: object
+ *                     properties:
+ *                       field:
+ *                         type: string
+ *                       message:
+ *                         type: string
  *       401:
- *         description: Invalid credentials
+ *         description: Invalid credentials or account deactivated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                 errorCode:
+ *                   type: string
+ *       429:
+ *         description: Too many login attempts
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                 errorCode:
+ *                   type: string
+ *                 retryAfter:
+ *                   type: number
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ */
+router.post('/login', loginRateLimiter, loginSanitizer, authController.login);
+
+/**
+ * @swagger
+ * /auth/logout:
+ *   post:
+ *     summary: Logout user
+ *     tags: [Authentication]
+ *     description: Logout user and invalidate session
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Logout successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *       401:
+ *         description: No token provided or invalid token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ */
+router.post('/logout', authController.logout);
+
+/**
+ * @swagger
+ * /auth/refresh:
+ *   post:
+ *     summary: Refresh JWT tokens
+ *     tags: [Authentication]
+ *     description: Refresh access token using refresh token
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - refresh_token
+ *             properties:
+ *               refresh_token:
+ *                 type: string
+ *                 description: Valid refresh token
+ *           example:
+ *             refresh_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+ *     responses:
+ *       200:
+ *         description: Tokens refreshed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     tokens:
+ *                       type: object
+ *                       properties:
+ *                         access_token:
+ *                           type: string
+ *                         refresh_token:
+ *                           type: string
+ *                     message:
+ *                       type: string
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *       400:
+ *         description: Refresh token is required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *       401:
+ *         description: Invalid or expired refresh token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ */
+router.post('/refresh', authController.refreshTokens);
+
+/**
+ * @swagger
+ * /auth/forgot-password:
+ *   post:
+ *     summary: Request password reset
+ *     tags: [Authentication]
+ *     description: Send a password reset email to the user's email address
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 description: User's email address
+ *           example:
+ *             email: "user@example.com"
+ *     responses:
+ *       200:
+ *         description: Password reset email sent (if email exists)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "If an account with that email exists, a password reset link has been sent."
+ *                 data:
+ *                   type: null
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       429:
+ *         description: Rate limit exceeded
  *         content:
  *           application/json:
  *             schema:
@@ -149,6 +454,133 @@ router.post('/register', authController.register);
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/login', authController.login);
+router.post(
+  '/forgot-password',
+  passwordResetRateLimiter,
+  inputSanitizer,
+  authController.forgotPassword
+);
+
+/**
+ * @swagger
+ * /auth/reset-password:
+ *   post:
+ *     summary: Reset password using token
+ *     tags: [Authentication]
+ *     description: Reset user password using the token from the reset email
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - token
+ *               - newPassword
+ *             properties:
+ *               token:
+ *                 type: string
+ *                 description: Password reset token from email
+ *               newPassword:
+ *                 type: string
+ *                 minLength: 8
+ *                 description: New password (min 8 chars, uppercase, lowercase, number)
+ *           example:
+ *             token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+ *             newPassword: "NewSecurePass123"
+ *     responses:
+ *       200:
+ *         description: Password reset successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Password has been reset successfully. You can now login with your new password."
+ *                 data:
+ *                   type: null
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *       400:
+ *         description: Validation error or invalid token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Invalid or expired token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.post('/reset-password', inputSanitizer, authController.resetPassword);
+
+/**
+ * @swagger
+ * /auth/verify-email:
+ *   post:
+ *     summary: Verify email address
+ *     tags: [Authentication]
+ *     description: Verify user's email address using the verification token from email
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - token
+ *             properties:
+ *               token:
+ *                 type: string
+ *                 description: Email verification token from email
+ *           example:
+ *             token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+ *     responses:
+ *       200:
+ *         description: Email verified successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Email verified successfully. You can now login to your account."
+ *                 data:
+ *                   type: null
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *       400:
+ *         description: Validation error or invalid token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Invalid or expired token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.post('/verify-email', inputSanitizer, authController.verifyEmail);
 
 export default router;

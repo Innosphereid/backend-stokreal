@@ -1,6 +1,7 @@
 // Import all email template extensions
 import './welcomeEmail';
 import './passwordResetEmail';
+import './passwordResetConfirmationEmail';
 import './verificationEmail';
 
 // Re-export the mailer with all extensions

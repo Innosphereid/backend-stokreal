@@ -46,7 +46,7 @@ export const errorHandler = (
   }
 
   if (error instanceof TokenInvalidError) {
-    const jwtError = new AppError(`Invalid token: ${error.reason}`, 401, ErrorCodes.TOKEN_INVALID);
+    const jwtError = new AppError(`Invalid token: ${error.reason}`, 401, ErrorCodes.INVALID_TOKEN);
     const errorResponse = formatErrorResponse(jwtError);
     res.status(401).json(errorResponse);
     return;
@@ -56,7 +56,7 @@ export const errorHandler = (
     const jwtError = new AppError(
       `Authentication required: token not found in ${error.location}`,
       401,
-      ErrorCodes.TOKEN_MISSING
+      ErrorCodes.INVALID_TOKEN
     );
     const errorResponse = formatErrorResponse(jwtError);
     res.status(401).json(errorResponse);
@@ -64,7 +64,7 @@ export const errorHandler = (
   }
 
   if (error instanceof JWTError) {
-    const jwtError = new AppError(error.message, error.statusCode, ErrorCodes.TOKEN_INVALID);
+    const jwtError = new AppError(error.message, error.statusCode, ErrorCodes.INVALID_TOKEN);
     const errorResponse = formatErrorResponse(jwtError);
     res.status(error.statusCode).json(errorResponse);
     return;

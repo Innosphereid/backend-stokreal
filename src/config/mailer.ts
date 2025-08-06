@@ -29,9 +29,9 @@ export interface EmailOptions {
   }>;
 }
 
-class MailerService {
-  private transporter: nodemailer.Transporter;
-  private config: MailerConfig;
+export class MailerService {
+  private readonly transporter: nodemailer.Transporter;
+  private readonly config: MailerConfig;
 
   constructor() {
     this.config = this.getMailerConfig();
@@ -81,6 +81,9 @@ class MailerService {
           buffer: true,
         });
       }
+
+      // If MAIL_LOG_ONLY is not set or is false, use actual SMTP
+      // This allows real email sending in development
     }
 
     // Create SMTP transporter with proper configuration
@@ -137,8 +140,10 @@ class MailerService {
         return { messageId: 'dev-mode-' + Date.now() };
       }
 
+      // Send actual email (both production and development when MAIL_LOG_ONLY is not true)
       const result = await this.transporter.sendMail(mailOptions);
-      logger.info(`Email sent successfully to ${mailOptions.to}`, { messageId: result.messageId });
+      const recipientString = Array.isArray(options.to) ? options.to.join(', ') : options.to;
+      logger.info(`Email sent successfully to ${recipientString}`, { messageId: result.messageId });
       return result;
     } catch (error) {
       logger.error('Failed to send email:', error);
@@ -156,8 +161,5 @@ class MailerService {
 
 // Create and export a singleton instance
 export const mailer = new MailerService();
-
-// Export the class for testing purposes
-export { MailerService };
 
 export default mailer;

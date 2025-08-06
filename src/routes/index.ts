@@ -3,12 +3,14 @@ import userRoutes from './users';
 import cookieRoutes from './cookies';
 import corsRoutes from './cors';
 import authRoutes from './auth';
+import adminRoutes from './admin';
 
 const router = Router();
 
 // API routes
 router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
+router.use('/admin', adminRoutes);
 router.use('/cookies', cookieRoutes);
 router.use('/cors', corsRoutes);
 
@@ -60,6 +62,7 @@ router.use('/cors', corsRoutes);
  *               endpoints:
  *                 auth: "/auth"
  *                 users: "/users"
+ *                 admin: "/admin"
  *                 cookies: "/cookies"
  *                 cors: "/cors"
  *                 health: "/health"
@@ -72,6 +75,7 @@ router.get('/', (req, res) => {
     endpoints: {
       auth: '/auth',
       users: '/users',
+      admin: '/admin',
       cookies: '/cookies',
       cors: '/cors',
       health: '/health',

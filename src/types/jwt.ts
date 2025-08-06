@@ -7,6 +7,9 @@ export interface JWTPayload {
   sub: string; // User ID
   email?: string;
   role?: string;
+  fullName?: string;
+  isActive?: boolean;
+  emailVerified?: boolean;
   type: TokenType;
   purpose?: string; // For verification tokens
   iat?: number;
@@ -19,6 +22,9 @@ export interface JWTUser {
   id: string;
   email?: string;
   role?: string;
+  fullName?: string;
+  isActive?: boolean;
+  emailVerified?: boolean;
 }
 
 export interface TokenPair {

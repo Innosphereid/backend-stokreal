@@ -13,7 +13,7 @@ export abstract class BaseModel<T extends DatabaseRecord> {
   /**
    * Find a record by ID
    */
-  async findById(id: number): Promise<T | null> {
+  async findById(id: string): Promise<T | null> {
     const record = await this.db(this.tableName).where({ id }).first();
     return record || null;
   }
@@ -24,21 +24,25 @@ export abstract class BaseModel<T extends DatabaseRecord> {
   async findAll(queryParams?: QueryParams): Promise<{ data: T[]; total: number }> {
     const { page = 1, limit = 10, sort = 'created_at', order = 'desc', search } = queryParams || {};
 
-    let query = this.db(this.tableName).select('*');
+    // Build base query for data
+    let dataQuery = this.db(this.tableName).select('*');
+
+    // Build base query for count (without select *)
+    let countQuery = this.db(this.tableName);
 
     // Apply search if implemented by child class
     if (search) {
-      query = this.applySearch(query, search);
+      dataQuery = this.applySearch(dataQuery, search);
+      countQuery = this.applySearch(countQuery, search);
     }
 
     // Get total count for pagination
-    const totalQuery = query.clone();
-    const [result] = await totalQuery.count('* as count');
+    const [result] = await countQuery.count('* as count');
     const total = parseInt((result?.count as string) || '0', 10);
 
-    // Apply pagination and sorting
+    // Apply pagination and sorting to data query
     const offset = (page - 1) * limit;
-    const data = await query.orderBy(sort, order).limit(limit).offset(offset);
+    const data = await dataQuery.orderBy(sort, order).limit(limit).offset(offset);
 
     return { data, total };
   }
@@ -61,7 +65,7 @@ export abstract class BaseModel<T extends DatabaseRecord> {
   /**
    * Update a record by ID
    */
-  async update(id: number, data: Partial<Omit<T, 'id' | 'created_at'>>): Promise<T | null> {
+  async update(id: string, data: Partial<Omit<T, 'id' | 'created_at'>>): Promise<T | null> {
     const [record] = await this.db(this.tableName)
       .where({ id })
       .update({
@@ -76,7 +80,7 @@ export abstract class BaseModel<T extends DatabaseRecord> {
   /**
    * Delete a record by ID
    */
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string): Promise<boolean> {
     const deletedRows = await this.db(this.tableName).where({ id }).del();
     return deletedRows > 0;
   }
@@ -99,7 +103,7 @@ export abstract class BaseModel<T extends DatabaseRecord> {
   /**
    * Check if a record exists by ID
    */
-  async exists(id: number): Promise<boolean> {
+  async exists(id: string): Promise<boolean> {
     const record = await this.db(this.tableName).where({ id }).first();
     return !!record;
   }
@@ -119,7 +123,7 @@ export abstract class BaseModel<T extends DatabaseRecord> {
   }
 
   /**
-   * Execute a raw query
+   * Execute raw SQL query
    */
   async raw(query: string, bindings?: readonly unknown[]): Promise<unknown> {
     if (bindings) {
@@ -129,38 +133,31 @@ export abstract class BaseModel<T extends DatabaseRecord> {
   }
 
   /**
-   * Begin a database transaction
+   * Execute operations within a transaction
    */
   async transaction<R>(callback: (trx: Knex.Transaction) => Promise<R>): Promise<R> {
     return await this.db.transaction(callback);
   }
 
   /**
-   * Apply search functionality - default implementation searches in 'name' field
-   * Child classes should override this method for entity-specific search
+   * Apply search functionality (to be implemented by child classes)
    */
-  protected applySearch(query: Knex.QueryBuilder, search: string): Knex.QueryBuilder {
-    // Default implementation - searches in common fields if they exist
-    // Child classes should override this for specific search logic
-    return query.where(builder => {
-      // Try to search in common text fields that might exist
-      const searchTerm = `%${search}%`;
-      builder
-        .whereRaw('CAST(id AS TEXT) ILIKE ?', [searchTerm])
-        .orWhereRaw('created_at::TEXT ILIKE ?', [searchTerm])
-        .orWhereRaw('updated_at::TEXT ILIKE ?', [searchTerm]);
-    });
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  protected applySearch(query: Knex.QueryBuilder, search?: string): Knex.QueryBuilder {
+    // Default implementation - child classes should override this
+    // search parameter is intentionally unused in default implementation
+    return query;
   }
 
   /**
-   * Get the table name
+   * Get table name
    */
   getTableName(): string {
     return this.tableName;
   }
 
   /**
-   * Get the database instance
+   * Get database instance
    */
   getDb(): Knex {
     return this.db;

@@ -11,7 +11,7 @@ import { UserModel } from '@/models';
 import { PasswordUtils } from '@/utils/password';
 
 export class UserService {
-  private userModel: UserModel;
+  private readonly userModel: UserModel;
 
   constructor() {
     this.userModel = new UserModel();
@@ -21,11 +21,18 @@ export class UserService {
     const { data: users, total } = await this.userModel.findAll(queryParams);
     const { page = 1, limit = 10 } = queryParams;
 
+    // Remove sensitive data for admin response
+    const sanitizedUsers = users.map(user => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { password_hash, ...userWithoutPassword } = user;
+      return userWithoutPassword as User;
+    });
+
     const meta = calculatePaginationMeta(page, limit, total);
-    return createPaginatedResponse(users, meta, 'Users retrieved successfully');
+    return createPaginatedResponse(sanitizedUsers, meta, 'Users retrieved successfully');
   }
 
-  async getUserById(id: number): Promise<User | null> {
+  async getUserById(id: string): Promise<User | null> {
     return await this.userModel.findById(id);
   }
 
@@ -43,14 +50,11 @@ export class UserService {
       if (errorMessage === 'Email already exists') {
         throw createError('Email already exists', 409);
       }
-      if (errorMessage === 'Username already exists') {
-        throw createError('Username already exists', 409);
-      }
       throw error;
     }
   }
 
-  async updateUser(id: number, updateData: UpdateUserRequest): Promise<User | null> {
+  async updateUser(id: string, updateData: UpdateUserRequest): Promise<User | null> {
     try {
       return await this.userModel.updateUser(id, updateData);
     } catch (error: unknown) {
@@ -58,14 +62,11 @@ export class UserService {
       if (errorMessage === 'Email already exists') {
         throw createError('Email already exists', 409);
       }
-      if (errorMessage === 'Username already exists') {
-        throw createError('Username already exists', 409);
-      }
       throw error;
     }
   }
 
-  async deleteUser(id: number): Promise<boolean> {
+  async deleteUser(id: string): Promise<boolean> {
     return await this.userModel.delete(id);
   }
 
@@ -79,10 +80,6 @@ export class UserService {
     return await this.userModel.findByEmailWithPassword(email);
   }
 
-  async getUserByUsername(username: string): Promise<User | null> {
-    return await this.userModel.findByUsername(username);
-  }
-
   async getUserStats(): Promise<{
     total: number;
     active: number;
@@ -92,11 +89,11 @@ export class UserService {
     return await this.userModel.getUserStats();
   }
 
-  async deactivateUser(id: number): Promise<User | null> {
+  async deactivateUser(id: string): Promise<User | null> {
     return await this.userModel.deactivateUser(id);
   }
 
-  async activateUser(id: number): Promise<User | null> {
+  async activateUser(id: string): Promise<User | null> {
     return await this.userModel.activateUser(id);
   }
 }

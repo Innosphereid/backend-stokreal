@@ -4,9 +4,7 @@ describe('AuthValidator', () => {
   describe('validateRegisterRequest', () => {
     const validData = {
       email: 'test@example.com',
-      username: 'testuser',
-      first_name: 'Test',
-      last_name: 'User',
+      full_name: 'Test User',
       password: 'Password123',
       confirm_password: 'Password123',
     };
@@ -19,12 +17,10 @@ describe('AuthValidator', () => {
 
     it('should return error for missing email', () => {
       const invalidData = {
-        username: validData.username,
-        first_name: validData.first_name,
-        last_name: validData.last_name,
+        full_name: validData.full_name,
         password: validData.password,
         confirm_password: validData.confirm_password,
-      };
+      } as any;
 
       const result = AuthValidator.validateRegisterRequest(invalidData);
       expect(result.isValid).toBe(false);
@@ -34,65 +30,27 @@ describe('AuthValidator', () => {
       });
     });
 
-    it('should return error for missing username', () => {
+    it('should return error for missing full_name', () => {
       const invalidData = {
         email: validData.email,
-        first_name: validData.first_name,
-        last_name: validData.last_name,
         password: validData.password,
         confirm_password: validData.confirm_password,
-      };
+      } as any;
 
       const result = AuthValidator.validateRegisterRequest(invalidData);
       expect(result.isValid).toBe(false);
       expect(result.errors).toContainEqual({
-        field: 'username',
-        message: 'Username is required',
-      });
-    });
-
-    it('should return error for missing first_name', () => {
-      const invalidData = {
-        email: validData.email,
-        username: validData.username,
-        last_name: validData.last_name,
-        password: validData.password,
-        confirm_password: validData.confirm_password,
-      };
-
-      const result = AuthValidator.validateRegisterRequest(invalidData);
-      expect(result.isValid).toBe(false);
-      expect(result.errors).toContainEqual({
-        field: 'first_name',
-        message: 'First name is required',
-      });
-    });
-
-    it('should return error for missing last_name', () => {
-      const invalidData = {
-        email: validData.email,
-        username: validData.username,
-        first_name: validData.first_name,
-        password: validData.password,
-        confirm_password: validData.confirm_password,
-      };
-
-      const result = AuthValidator.validateRegisterRequest(invalidData);
-      expect(result.isValid).toBe(false);
-      expect(result.errors).toContainEqual({
-        field: 'last_name',
-        message: 'Last name is required',
+        field: 'full_name',
+        message: 'Full name is required',
       });
     });
 
     it('should return error for missing password', () => {
       const invalidData = {
         email: validData.email,
-        username: validData.username,
-        first_name: validData.first_name,
-        last_name: validData.last_name,
+        full_name: validData.full_name,
         confirm_password: validData.confirm_password,
-      };
+      } as any;
 
       const result = AuthValidator.validateRegisterRequest(invalidData);
       expect(result.isValid).toBe(false);
@@ -105,11 +63,9 @@ describe('AuthValidator', () => {
     it('should return error for missing confirm_password', () => {
       const invalidData = {
         email: validData.email,
-        username: validData.username,
-        first_name: validData.first_name,
-        last_name: validData.last_name,
+        full_name: validData.full_name,
         password: validData.password,
-      };
+      } as any;
 
       const result = AuthValidator.validateRegisterRequest(invalidData);
       expect(result.isValid).toBe(false);
@@ -142,80 +98,36 @@ describe('AuthValidator', () => {
       });
     });
 
-    it('should return error for invalid username format', () => {
-      const invalidData = { ...validData, username: 'invalid-username!' };
+    it('should return error for empty full name', () => {
+      const invalidData = { ...validData, full_name: '' };
 
       const result = AuthValidator.validateRegisterRequest(invalidData);
       expect(result.isValid).toBe(false);
       expect(result.errors).toContainEqual({
-        field: 'username',
-        message: 'Username can only contain letters, numbers, and underscores',
+        field: 'full_name',
+        message: 'Full name is required',
       });
     });
 
-    it('should return error for username too short', () => {
-      const invalidData = { ...validData, username: 'ab' };
+    it('should return error for full name too short', () => {
+      const invalidData = { ...validData, full_name: 'A' };
 
       const result = AuthValidator.validateRegisterRequest(invalidData);
       expect(result.isValid).toBe(false);
       expect(result.errors).toContainEqual({
-        field: 'username',
-        message: 'Username must be at least 3 characters long',
+        field: 'full_name',
+        message: 'Full name must be at least 2 characters long',
       });
     });
 
-    it('should return error for username too long', () => {
-      const invalidData = { ...validData, username: 'a'.repeat(31) };
+    it('should return error for full name too long', () => {
+      const invalidData = { ...validData, full_name: 'a'.repeat(256) };
 
       const result = AuthValidator.validateRegisterRequest(invalidData);
       expect(result.isValid).toBe(false);
       expect(result.errors).toContainEqual({
-        field: 'username',
-        message: 'Username must be less than 30 characters',
-      });
-    });
-
-    it('should return error for empty first name', () => {
-      const invalidData = { ...validData, first_name: '' };
-
-      const result = AuthValidator.validateRegisterRequest(invalidData);
-      expect(result.isValid).toBe(false);
-      expect(result.errors).toContainEqual({
-        field: 'first_name',
-        message: 'First name is required',
-      });
-    });
-
-    it('should return error for first name too long', () => {
-      const invalidData = { ...validData, first_name: 'a'.repeat(51) };
-
-      const result = AuthValidator.validateRegisterRequest(invalidData);
-      expect(result.isValid).toBe(false);
-      expect(result.errors).toContainEqual({
-        field: 'first_name',
-        message: 'First name must be less than 50 characters',
-      });
-    });
-
-    it('should return error for empty last name', () => {
-      const invalidData = { ...validData, last_name: '' };
-
-      const result = AuthValidator.validateRegisterRequest(invalidData);
-      expect(result.isValid).toBe(false);
-      expect(result.errors).toContainEqual({
-        field: 'last_name',
-        message: 'Last name is required',
-      });
-    });
-
-    it('should return error for last name too long', () => {
-      const invalidData = { ...validData, last_name: 'a'.repeat(51) };
-
-      const result = AuthValidator.validateRegisterRequest(invalidData);
-      expect(result.isValid).toBe(false);
-      expect(result.errors).toContainEqual({
-        field: 'last_name',
-        message: 'Last name must be less than 50 characters',
+        field: 'full_name',
+        message: 'Full name must be less than 255 characters',
       });
     });
 
@@ -307,9 +219,7 @@ describe('AuthValidator', () => {
     it('should return multiple errors for multiple validation failures', () => {
       const invalidData = {
         email: 'invalid-email',
-        username: 'ab',
-        first_name: 'Test',
-        last_name: 'User',
+        full_name: 'A',
         password: 'weak',
         confirm_password: 'different',
       };
@@ -322,8 +232,56 @@ describe('AuthValidator', () => {
         message: 'Invalid email format',
       });
       expect(result.errors).toContainEqual({
-        field: 'username',
-        message: 'Username must be at least 3 characters long',
+        field: 'full_name',
+        message: 'Full name must be at least 2 characters long',
+      });
+    });
+
+    it('should validate phone number format', () => {
+      const validDataWithPhone = {
+        ...validData,
+        phone: '+628123456789',
+      };
+
+      const result = AuthValidator.validateRegisterRequest(validDataWithPhone);
+      expect(result.isValid).toBe(true);
+    });
+
+    it('should return error for invalid phone number format', () => {
+      const invalidData = {
+        ...validData,
+        phone: 'invalid-phone',
+      };
+
+      const result = AuthValidator.validateRegisterRequest(invalidData);
+      expect(result.isValid).toBe(false);
+      expect(result.errors).toContainEqual({
+        field: 'phone',
+        message: 'Invalid phone number format',
+      });
+    });
+
+    it('should validate WhatsApp number format', () => {
+      const validDataWithWhatsApp = {
+        ...validData,
+        whatsapp_number: '+628123456789',
+      };
+
+      const result = AuthValidator.validateRegisterRequest(validDataWithWhatsApp);
+      expect(result.isValid).toBe(true);
+    });
+
+    it('should return error for invalid WhatsApp number format', () => {
+      const invalidData = {
+        ...validData,
+        whatsapp_number: 'invalid-whatsapp',
+      };
+
+      const result = AuthValidator.validateRegisterRequest(invalidData);
+      expect(result.isValid).toBe(false);
+      expect(result.errors).toContainEqual({
+        field: 'whatsapp_number',
+        message: 'WhatsApp number must be in Indonesian format (+62xxx or 08xxx)',
       });
     });
   });
@@ -332,9 +290,7 @@ describe('AuthValidator', () => {
     it('should sanitize registration data correctly', () => {
       const unsanitizedData = {
         email: '  TEST@EXAMPLE.COM  ',
-        username: '  TESTUSER  ',
-        first_name: '  Test  ',
-        last_name: '  User  ',
+        full_name: '  Test User  ',
         password: 'Password123',
         confirm_password: 'Password123',
       };
@@ -343,20 +299,18 @@ describe('AuthValidator', () => {
 
       expect(result).toEqual({
         email: 'test@example.com',
-        username: 'testuser',
-        first_name: 'Test',
-        last_name: 'User',
+        full_name: 'Test User',
         password: 'Password123',
         confirm_password: 'Password123',
+        phone: undefined,
+        whatsapp_number: undefined,
       });
     });
 
     it('should handle undefined values gracefully', () => {
       const dataWithUndefined = {
         email: undefined,
-        username: undefined,
-        first_name: undefined,
-        last_name: undefined,
+        full_name: undefined,
         password: undefined,
         confirm_password: undefined,
       };
@@ -365,20 +319,18 @@ describe('AuthValidator', () => {
 
       expect(result).toEqual({
         email: undefined,
-        username: undefined,
-        first_name: undefined,
-        last_name: undefined,
+        full_name: undefined,
         password: undefined,
         confirm_password: undefined,
+        phone: undefined,
+        whatsapp_number: undefined,
       });
     });
 
     it('should handle null values gracefully', () => {
       const dataWithNull = {
         email: null,
-        username: null,
-        first_name: null,
-        last_name: null,
+        full_name: null,
         password: null,
         confirm_password: null,
       };
@@ -387,11 +339,11 @@ describe('AuthValidator', () => {
 
       expect(result).toEqual({
         email: null,
-        username: null,
-        first_name: null,
-        last_name: null,
+        full_name: null,
         password: null,
         confirm_password: null,
+        phone: undefined,
+        whatsapp_number: undefined,
       });
     });
   });

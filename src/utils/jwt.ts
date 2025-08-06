@@ -114,6 +114,10 @@ export class JWTUtils {
       sub: user.id,
       ...(user.email && { email: user.email }),
       ...(user.role && { role: user.role }),
+      // Include additional user details for admin endpoints
+      ...(user.fullName && { fullName: user.fullName }),
+      ...(user.isActive !== undefined && { isActive: user.isActive }),
+      ...(user.emailVerified !== undefined && { emailVerified: user.emailVerified }),
     };
 
     const refreshTokenPayload = {
@@ -155,7 +159,7 @@ export class JWTUtils {
   }
 
   /**
-   * Generate a verification token
+   * Generate a verification token for email verification, password reset, etc.
    */
   static generateVerificationToken(
     userId: string,
@@ -198,6 +202,9 @@ export class JWTUtils {
       id: payload.sub,
       email: payload.email || '',
       role: payload.role || 'user',
+      fullName: payload.fullName || '',
+      isActive: payload.isActive !== undefined ? payload.isActive : true,
+      emailVerified: payload.emailVerified !== undefined ? payload.emailVerified : false,
     };
   }
 
@@ -218,7 +225,7 @@ export class JWTUtils {
    */
   static getTokenExpiration(token: string): Date | null {
     const decoded = this.decodeToken(token);
-    if (!decoded || !decoded.exp) {
+    if (!decoded?.exp) {
       return null;
     }
 

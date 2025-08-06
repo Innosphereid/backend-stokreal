@@ -2,6 +2,10 @@ import { UserService } from './UserService';
 import { JWTUtils } from '@/utils/jwt';
 import { logger } from '@/utils/logger';
 import { PasswordUtils } from '@/utils/password';
+import { LoginAttemptService } from './LoginAttemptService';
+import { AuditLogService } from './AuditLogService';
+import { EmailVerificationService } from './EmailVerificationService';
+import { mailer } from '@/mails';
 import {
   LoginCredentials,
   LoginResponse,
@@ -13,22 +17,28 @@ import {
   JWTUser,
   AuthServiceInterface,
 } from '@/types/jwt';
-import { User } from '@/types';
-import { RegisterRequest } from '@/types/auth';
+import { User, CreateUserRequest } from '@/types';
 import { createResourceConflictError, createError } from '@/utils/errors';
 import { ErrorCodes } from '@/types/errors';
+import { Request } from 'express';
 
 export class AuthService implements AuthServiceInterface {
-  private userService: UserService;
+  private readonly userService: UserService;
+  private readonly loginAttemptService: LoginAttemptService;
+  private readonly auditLogService: AuditLogService;
+  private readonly emailVerificationService: EmailVerificationService;
 
   constructor() {
     this.userService = new UserService();
+    this.loginAttemptService = new LoginAttemptService();
+    this.auditLogService = new AuditLogService();
+    this.emailVerificationService = new EmailVerificationService();
   }
 
   /**
-   * Register a new user
+   * Register a new user with email verification
    */
-  async register(userData: RegisterRequest): Promise<User> {
+  async register(userData: CreateUserRequest): Promise<User> {
     try {
       logger.info(`Registration attempt for email: ${userData.email}`);
 
@@ -42,24 +52,28 @@ export class AuthService implements AuthServiceInterface {
         );
       }
 
-      // Check if username already exists
-      const existingUserByUsername = await this.userService.getUserByUsername(userData.username);
-      if (existingUserByUsername) {
-        throw createResourceConflictError(
-          'Username already exists',
-          ErrorCodes.USERNAME_ALREADY_EXISTS,
-          'A user with this username is already registered'
-        );
-      }
-
       // Create user using UserService
-      const newUser = await this.userService.createUser({
-        email: userData.email,
-        username: userData.username,
-        first_name: userData.first_name,
-        last_name: userData.last_name,
-        password: userData.password,
+      const newUser = await this.userService.createUser(userData);
+
+      // Generate email verification token
+      const verificationToken = await this.generateVerificationToken({
+        userId: newUser.id,
+        purpose: 'email_verification',
+        email: newUser.email,
       });
+
+      // Send welcome email with verification token
+      try {
+        await mailer.sendVerificationEmail(
+          newUser.email,
+          newUser.full_name,
+          verificationToken.token
+        );
+        logger.info(`Verification email sent to ${newUser.email}`);
+      } catch (emailError) {
+        logger.error('Failed to send verification email:', emailError);
+        // Don't fail registration if email fails
+      }
 
       logger.info(`User ${newUser.id} registered successfully`);
 
@@ -82,30 +96,79 @@ export class AuthService implements AuthServiceInterface {
   }
 
   /**
-   * Authenticate user and generate JWT tokens
+   * Authenticate user and generate JWT tokens with enhanced security
    */
-  async login(credentials: LoginCredentials): Promise<LoginResponse> {
+  async login(credentials: LoginCredentials, clientIp?: string): Promise<LoginResponse> {
     try {
       const { email, password } = credentials;
 
       logger.info(`Login attempt for email: ${email}`);
 
+      // Get client IP for rate limiting
+      const ip = clientIp || this.getClientIp();
+
+      // Check if IP is blocked
+      if (await this.loginAttemptService.isIpBlocked(ip)) {
+        throw createError(
+          'Too many failed login attempts from this IP. Please try again later.',
+          429,
+          ErrorCodes.RATE_LIMIT_EXCEEDED
+        );
+      }
+
+      // Check if email is blocked
+      if (await this.loginAttemptService.isEmailBlocked(email)) {
+        throw createError(
+          'Too many failed login attempts for this email. Please try again later.',
+          429,
+          ErrorCodes.RATE_LIMIT_EXCEEDED
+        );
+      }
+
       // Validate user credentials using existing UserService
       const user = await this.validateUserCredentials(email, password);
 
       if (!user) {
+        // Record failed attempt
+        await this.loginAttemptService.recordAttempt({
+          email,
+          ipAddress: ip,
+          success: false,
+          failureReason: 'Invalid credentials',
+        });
+
         throw createError('Invalid email or password', 401, ErrorCodes.INVALID_CREDENTIALS);
       }
 
       if (!user.is_active) {
+        // Record failed attempt
+        await this.loginAttemptService.recordAttempt({
+          userId: user.id,
+          email,
+          ipAddress: ip,
+          success: false,
+          failureReason: 'Account deactivated',
+        });
+
         throw createError('Account is deactivated', 401, ErrorCodes.UNAUTHORIZED);
       }
 
-      // Create JWT user object
+      // Record successful attempt
+      await this.loginAttemptService.recordAttempt({
+        userId: user.id,
+        email,
+        ipAddress: ip,
+        success: true,
+      });
+
+      // Create JWT user object with full details
       const jwtUser: JWTUser = {
-        id: user.id.toString(),
+        id: user.id,
         email: user.email,
-        role: 'user', // Default role, can be extended based on user data
+        role: user.role || 'user', // Use user's role from database
+        fullName: user.full_name,
+        isActive: user.is_active,
+        emailVerified: user.email_verified,
       };
 
       // Generate token pair
@@ -116,9 +179,9 @@ export class AuthService implements AuthServiceInterface {
 
       // Create authenticated user response
       const authenticatedUser: AuthenticatedUser = {
-        id: user.id.toString(),
+        id: user.id,
         email: user.email,
-        role: 'user',
+        role: user.role || 'user',
         isActive: user.is_active,
       };
 
@@ -138,6 +201,39 @@ export class AuthService implements AuthServiceInterface {
 
       throw createError('Login failed', 500, ErrorCodes.INTERNAL_SERVER_ERROR);
     }
+  }
+
+  /**
+   * Get client IP address
+   */
+  private getClientIp(req?: Request): string {
+    if (!req) {
+      return 'unknown';
+    }
+
+    // Extract IP from request headers
+    const forwardedFor = req.headers['x-forwarded-for'];
+    if (forwardedFor && typeof forwardedFor === 'string' && forwardedFor.length > 0) {
+      const firstIp = forwardedFor.split(',')[0];
+      return firstIp ? firstIp.trim() : 'unknown';
+    }
+
+    const realIp = req.headers['x-real-ip'];
+    if (realIp && typeof realIp === 'string' && realIp.length > 0) {
+      return realIp;
+    }
+
+    const socketIp = req.socket?.remoteAddress;
+    if (socketIp) {
+      return socketIp;
+    }
+
+    const reqIp = req.ip;
+    if (reqIp) {
+      return reqIp;
+    }
+
+    return 'unknown';
   }
 
   /**
@@ -195,38 +291,107 @@ export class AuthService implements AuthServiceInterface {
     try {
       const { userId, purpose, email } = request;
 
-      logger.info(`Generating ${purpose} token for user: ${userId}`);
+      logger.info(`Generating verification token for user ${userId}, purpose: ${purpose}`);
 
-      // Verify user exists
-      const user = await this.userService.getUserById(parseInt(userId, 10));
-      if (!user) {
-        throw createError('User not found', 404);
-      }
-
-      // Generate verification token
-      const token = JWTUtils.generateVerificationToken(userId, purpose, email || user.email);
+      // Generate token with 1-hour expiration for password reset
+      const expiresIn = purpose === 'password_reset' ? '1h' : '24h';
+      const token = JWTUtils.generateVerificationToken(userId, purpose, email, expiresIn);
 
       // Calculate expiration time
-      const expirationTime = JWTUtils.getTokenExpiration(token);
-      if (!expirationTime) {
-        throw createError('Failed to determine token expiration', 500);
-      }
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + (purpose === 'password_reset' ? 1 : 24));
 
-      logger.info(`Generated ${purpose} token for user ${userId}`);
+      // Store verification token in database
+      await this.emailVerificationService.createVerification({
+        userId,
+        token,
+        purpose,
+        expiresAt,
+      });
+
+      logger.info(`Verification token generated for user ${userId}, expires at ${expiresAt}`);
 
       return {
         token,
-        expiresAt: expirationTime,
-        message: `${purpose} token generated successfully`,
+        expiresAt,
+        message: 'Verification token generated successfully',
       };
     } catch (error) {
-      logger.error('Verification token generation failed:', error);
+      logger.error('Failed to generate verification token:', error);
+      throw createError(
+        'Failed to generate verification token',
+        500,
+        ErrorCodes.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
 
-      if (error instanceof Error && 'statusCode' in error) {
+  /**
+   * Forgot password - send reset email with rate limiting
+   */
+  async forgotPassword(email: string, clientIp: string): Promise<void> {
+    try {
+      logger.info(`Forgot password request for email: ${email}, IP: ${clientIp}`);
+
+      // Check rate limiting for password reset requests
+      if (await this.loginAttemptService.isEmailBlocked(email)) {
+        logger.warn(`Password reset blocked for email: ${email} due to rate limiting`);
+        // Don't reveal if email exists or not for security
+        return;
+      }
+
+      // Find user by email
+      const user = await this.userService.getUserByEmail(email);
+      if (!user) {
+        logger.info(`Password reset requested for non-existent email: ${email}`);
+        // Don't reveal if email exists or not for security
+        return;
+      }
+
+      // Check if user is active
+      if (!user.is_active) {
+        logger.warn(`Password reset requested for inactive user: ${user.id}`);
+        // Don't reveal if email exists or not for security
+        return;
+      }
+
+      // Generate password reset token
+      const resetToken = await this.generateVerificationToken({
+        userId: user.id,
+        purpose: 'password_reset',
+        email: user.email,
+      });
+
+      // Send password reset email
+      try {
+        await mailer.sendPasswordResetEmail(user.email, user.full_name, resetToken.token);
+        logger.info(`Password reset email sent to ${user.email}`);
+
+        // Record the attempt (successful)
+        await this.loginAttemptService.recordAttempt({
+          userId: user.id,
+          email,
+          ipAddress: clientIp,
+          success: true,
+        });
+      } catch (emailError) {
+        logger.error('Failed to send password reset email:', emailError);
+        throw createError('Failed to send password reset email', 500, ErrorCodes.EMAIL_SEND_FAILED);
+      }
+    } catch (error) {
+      logger.error('Forgot password failed:', error);
+
+      // Re-throw AppError instances as they are already properly formatted
+      if (error instanceof Error && 'statusCode' in error && 'errorCode' in error) {
         throw error;
       }
 
-      throw createError('Verification token generation failed', 500);
+      // For other errors, throw a generic error
+      throw createError(
+        'Failed to process password reset request',
+        500,
+        ErrorCodes.INTERNAL_SERVER_ERROR
+      );
     }
   }
 
@@ -237,7 +402,8 @@ export class AuthService implements AuthServiceInterface {
     try {
       logger.debug(`Verifying ${purpose || 'verification'} token`);
 
-      // Verify the token using JWT utility
+      // Try to verify the token using JWT utility
+      // This will work for both regular and short tokens
       const payload = JWTUtils.verifyVerificationToken(token, purpose);
 
       logger.info(`${purpose || 'Verification'} token verified for user ${payload.sub}`);
@@ -263,13 +429,13 @@ export class AuthService implements AuthServiceInterface {
       const payload = JWTUtils.verifyToken(token, 'access');
 
       // Get full user information from database
-      const user = await this.userService.getUserById(parseInt(payload.sub, 10));
+      const user = await this.userService.getUserById(payload.sub);
       if (!user) {
         return null;
       }
 
       return {
-        id: user.id.toString(),
+        id: user.id,
         email: user.email,
         role: 'user', // Default role, can be extended
         isActive: user.is_active,
@@ -295,7 +461,7 @@ export class AuthService implements AuthServiceInterface {
       logger.info(`Password change attempt for user: ${userId}`);
 
       // Get user from database first to get email
-      const user = await this.userService.getUserById(parseInt(userId, 10));
+      const user = await this.userService.getUserById(userId);
       if (!user) {
         throw createError('User not found', 404);
       }
@@ -316,7 +482,7 @@ export class AuthService implements AuthServiceInterface {
       }
 
       // Update password using UserService
-      await this.userService.updateUser(parseInt(userId, 10), { password: newPassword });
+      await this.userService.updateUser(userId, { password: newPassword });
 
       logger.info(`Password changed successfully for user ${userId}`);
     } catch (error) {
@@ -340,8 +506,26 @@ export class AuthService implements AuthServiceInterface {
       // Verify the reset token
       const payload = await this.verifyToken(token, 'password_reset');
 
-      // Update password
-      await this.userService.updateUser(parseInt(payload.sub, 10), { password: newPassword });
+      // Get user details for confirmation email
+      const user = await this.userService.getUserById(payload.sub);
+      if (!user) {
+        throw createError('User not found', 404);
+      }
+
+      // Hash the new password
+      const hashedPassword = await PasswordUtils.hashPassword(newPassword);
+
+      // Update password using UserService with password_hash field
+      await this.userService.updateUser(payload.sub, { password_hash: hashedPassword });
+
+      // Send confirmation email
+      try {
+        await mailer.sendPasswordResetConfirmationEmail(user.email, user.full_name);
+        logger.info(`Password reset confirmation email sent to ${user.email}`);
+      } catch (emailError) {
+        logger.error('Failed to send password reset confirmation email:', emailError);
+        // Don't fail the password reset if email fails
+      }
 
       logger.info(`Password reset successfully for user ${payload.sub}`);
     } catch (error) {
@@ -352,6 +536,60 @@ export class AuthService implements AuthServiceInterface {
       }
 
       throw createError('Password reset failed', 500);
+    }
+  }
+
+  /**
+   * Verify email using verification token
+   */
+  async verifyEmail(token: string): Promise<void> {
+    try {
+      logger.info('Email verification attempt');
+
+      // Check if token exists in database and is not used
+      const verification = await this.emailVerificationService.findByToken(token);
+      if (!verification) {
+        throw createError('Invalid verification token', 401, ErrorCodes.INVALID_TOKEN);
+      }
+
+      if (verification.is_used) {
+        throw createError('Verification token already used', 401, ErrorCodes.INVALID_TOKEN);
+      }
+
+      if (verification.expires_at < new Date()) {
+        throw createError('Verification token expired', 401, ErrorCodes.TOKEN_EXPIRED);
+      }
+
+      // Verify the email verification token using JWT
+      const payload = await this.verifyToken(token, 'email_verification');
+
+      // Get user details from JWT payload
+      const user = await this.userService.getUserById(payload.sub);
+      if (!user) {
+        throw createError('User not found', 404);
+      }
+
+      // Check if email is already verified
+      if (user.email_verified) {
+        logger.info(`Email already verified for user ${payload.sub}`);
+        return; // Don't throw error, just return success
+      }
+
+      // Mark verification token as used
+      await this.emailVerificationService.markAsUsed(token);
+
+      // Update user's email verification status
+      await this.userService.updateUser(payload.sub, { email_verified: true });
+
+      logger.info(`Email verified successfully for user ${payload.sub}`);
+    } catch (error) {
+      logger.error('Email verification failed:', error);
+
+      if (error instanceof Error && 'statusCode' in error) {
+        throw error;
+      }
+
+      throw createError('Email verification failed', 500);
     }
   }
 
@@ -381,10 +619,15 @@ export class AuthService implements AuthServiceInterface {
       const user: User = {
         id: userWithPassword.id,
         email: userWithPassword.email,
-        username: userWithPassword.username,
-        first_name: userWithPassword.first_name,
-        last_name: userWithPassword.last_name,
+        password_hash: userWithPassword.password_hash,
+        full_name: userWithPassword.full_name,
+        phone: userWithPassword.phone,
+        whatsapp_number: userWithPassword.whatsapp_number,
+        subscription_plan: userWithPassword.subscription_plan,
+        subscription_expires_at: userWithPassword.subscription_expires_at,
         is_active: userWithPassword.is_active,
+        email_verified: userWithPassword.email_verified ?? false,
+        role: userWithPassword.role || 'user',
         created_at: userWithPassword.created_at,
         updated_at: userWithPassword.updated_at,
         ...(userWithPassword.last_login && { last_login: userWithPassword.last_login }),
@@ -399,7 +642,7 @@ export class AuthService implements AuthServiceInterface {
   /**
    * Update user's last login timestamp (private method)
    */
-  private async updateLastLogin(userId: number): Promise<void> {
+  private async updateLastLogin(userId: string): Promise<void> {
     try {
       await this.userService.updateUser(userId, {
         last_login: new Date(),
@@ -430,7 +673,7 @@ export class AuthService implements AuthServiceInterface {
    */
   async userHasRole(userId: string, role: string): Promise<boolean> {
     try {
-      const user = await this.userService.getUserById(parseInt(userId, 10));
+      const user = await this.userService.getUserById(userId);
       if (!user) {
         return false;
       }

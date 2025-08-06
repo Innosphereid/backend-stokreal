@@ -19,7 +19,14 @@
     "seed:make": "knex seed:make",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "test:unit": "jest --testPathPattern=src/tests/services",
+    "test:integration": "jest --testPathPattern=src/tests/integration",
+    "test:security": "jest --testPathPattern=src/tests/security",
+    "test:performance": "jest --testPathPattern=src/tests/performance",
+    "test:all": "jest --coverage --verbose",
+    "test:ci": "jest --coverage --ci --watchAll=false",
+    "test:debug": "jest --detectOpenHandles --forceExit --verbose"
   },
   "keywords": [
     "stokreal",

@@ -59,20 +59,19 @@ describe('AuthController', () => {
   describe('POST /register', () => {
     const validUserData = {
       email: 'test@example.com',
-      username: 'testuser',
-      first_name: 'Test',
-      last_name: 'User',
+      full_name: 'Test User',
       password: 'Password123',
       confirm_password: 'Password123',
     };
 
     const mockUser: User = {
-      id: 1,
+      id: '1',
       email: 'test@example.com',
-      username: 'testuser',
-      first_name: 'Test',
-      last_name: 'User',
+      password_hash: 'hashed_password',
+      full_name: 'Test User',
+      subscription_plan: 'free',
       is_active: true,
+      email_verified: false,
       created_at: new Date(),
       updated_at: new Date(),
     };
@@ -84,15 +83,16 @@ describe('AuthController', () => {
       const response = await request(app).post('/register').send(validUserData).expect(201);
 
       expect(response.body).toEqual({
-        message: 'User registered successfully',
+        message: 'User registered successfully. Please check your email for verification.',
         data: {
           user: {
             id: '1',
             email: 'test@example.com',
-            username: 'testuser',
-            first_name: 'Test',
-            last_name: 'User',
+            full_name: 'Test User',
+            subscription_plan: 'free',
             is_active: true,
+            created_at: expect.any(String),
+            email_verified: false,
           },
         },
         timestamp: expect.any(String),
@@ -100,19 +100,17 @@ describe('AuthController', () => {
 
       expect(mockAuthService.register).toHaveBeenCalledWith({
         email: 'test@example.com',
-        username: 'testuser',
-        first_name: 'Test',
-        last_name: 'User',
+        full_name: 'Test User',
         password: 'Password123',
         confirm_password: 'Password123',
+        phone: undefined,
+        whatsapp_number: undefined,
       });
     });
 
     it('should return validation error for missing email', async () => {
       const invalidData = {
-        username: validUserData.username,
-        first_name: validUserData.first_name,
-        last_name: validUserData.last_name,
+        full_name: validUserData.full_name,
         password: validUserData.password,
         confirm_password: validUserData.confirm_password,
       };
@@ -181,8 +179,8 @@ describe('AuthController', () => {
       expect(mockAuthService.register).not.toHaveBeenCalled();
     });
 
-    it('should return validation error for invalid username format', async () => {
-      const invalidData = { ...validUserData, username: 'invalid-username!' };
+    it('should return validation error for invalid full_name format', async () => {
+      const invalidData = { ...validUserData, full_name: '' };
 
       const response = await request(app).post('/register').send(invalidData).expect(400);
 
@@ -191,8 +189,8 @@ describe('AuthController', () => {
         message: 'Validation failed',
         errors: [
           {
-            field: 'username',
-            message: 'Username can only contain letters, numbers, and underscores',
+            field: 'full_name',
+            message: 'Full name is required',
           },
         ],
         timestamp: expect.any(String),
@@ -220,9 +218,7 @@ describe('AuthController', () => {
     it('should sanitize input data (trim and lowercase)', async () => {
       const unsanitizedData = {
         email: '  TEST@EXAMPLE.COM  ',
-        username: '  TESTUSER  ',
-        first_name: '  Test  ',
-        last_name: '  User  ',
+        full_name: '  Test User  ',
         password: 'Password123',
         confirm_password: 'Password123',
       };
@@ -233,11 +229,11 @@ describe('AuthController', () => {
 
       expect(mockAuthService.register).toHaveBeenCalledWith({
         email: 'test@example.com',
-        username: 'testuser',
-        first_name: 'Test',
-        last_name: 'User',
+        full_name: 'Test User',
         password: 'Password123',
         confirm_password: 'Password123',
+        phone: undefined,
+        whatsapp_number: undefined,
       });
     });
   });
@@ -249,12 +245,13 @@ describe('AuthController', () => {
     };
 
     const mockUser: User = {
-      id: 1,
+      id: '1',
       email: 'test@example.com',
-      username: 'testuser',
-      first_name: 'Test',
-      last_name: 'User',
+      password_hash: 'hashed_password',
+      full_name: 'Test User',
+      subscription_plan: 'free',
       is_active: true,
+      email_verified: false,
       created_at: new Date(),
       updated_at: new Date(),
     };
@@ -287,25 +284,26 @@ describe('AuthController', () => {
           user: {
             id: '1',
             email: 'test@example.com',
-            username: 'testuser',
-            first_name: 'Test',
-            last_name: 'User',
-            role: 'user',
-            is_active: true,
+            full_name: 'Test User',
+            subscription_plan: 'free',
           },
           tokens: {
             access_token: 'mock-access-token',
             refresh_token: 'mock-refresh-token',
+            expires_in: 86400,
           },
         },
         timestamp: expect.any(String),
       });
 
-      expect(mockAuthService.login).toHaveBeenCalledWith({
-        email: 'test@example.com',
-        password: 'Password123',
-        rememberMe: false,
-      });
+      expect(mockAuthService.login).toHaveBeenCalledWith(
+        {
+          email: 'test@example.com',
+          password: 'Password123',
+          rememberMe: false,
+        },
+        expect.any(String)
+      );
     });
 
     it('should login with remember_me option', async () => {
@@ -320,11 +318,14 @@ describe('AuthController', () => {
 
       await request(app).post('/login').send(loginDataWithRemember).expect(200);
 
-      expect(mockAuthService.login).toHaveBeenCalledWith({
-        email: 'test@example.com',
-        password: 'Password123',
-        rememberMe: true,
-      });
+      expect(mockAuthService.login).toHaveBeenCalledWith(
+        {
+          email: 'test@example.com',
+          password: 'Password123',
+          rememberMe: true,
+        },
+        expect.any(String)
+      );
     });
 
     it('should return validation error for missing email', async () => {
@@ -388,11 +389,14 @@ describe('AuthController', () => {
 
       await request(app).post('/login').send(unsanitizedData).expect(200);
 
-      expect(mockAuthService.login).toHaveBeenCalledWith({
-        email: 'test@example.com',
-        password: 'Password123',
-        rememberMe: false,
-      });
+      expect(mockAuthService.login).toHaveBeenCalledWith(
+        {
+          email: 'test@example.com',
+          password: 'Password123',
+          rememberMe: false,
+        },
+        expect.any(String)
+      );
     });
 
     it('should handle authentication failure', async () => {

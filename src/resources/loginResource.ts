@@ -9,17 +9,16 @@ export class LoginResource {
   static formatLoginResponse(loginData: JWTLoginResponse, user: User): LoginResponse {
     return {
       user: {
-        id: user.id.toString(),
+        id: user.id,
         email: user.email,
-        username: user.username,
-        first_name: user.first_name,
-        last_name: user.last_name,
-        role: loginData.user.role,
-        is_active: user.is_active,
+        full_name: user.full_name,
+        subscription_plan: user.subscription_plan,
+        subscription_expires_at: user.subscription_expires_at || undefined,
       },
       tokens: {
         access_token: loginData.tokens.accessToken,
         refresh_token: loginData.tokens.refreshToken,
+        expires_in: 86400, // 24 hours in seconds
       },
     };
   }
