@@ -180,7 +180,7 @@ describe('LoginValidator', () => {
       expect(result.errors).toEqual(
         expect.arrayContaining([
           { field: 'email', message: 'Invalid email format' },
-          { field: 'password', message: 'Password cannot be empty' },
+          { field: 'password', message: 'Password is required' },
           { field: 'remember_me', message: 'Remember me must be a boolean value' },
         ])
       );

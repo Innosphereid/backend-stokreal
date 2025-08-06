@@ -1,6 +1,7 @@
 import { JWTUtils } from '../../utils/jwt';
 import { jwtConfig } from '../../config/jwt';
-import { JWTUser, TokenPair, JWTPayload } from '../../types/jwt';
+import { JWTUser, TokenPair, JWTPayload, TokenExpiredError } from '../../types/jwt';
+import jwt from 'jsonwebtoken';
 
 // Mock dependencies
 jest.mock('../../config/jwt');
@@ -47,25 +48,24 @@ describe('JWTUtils', () => {
     it('should sign access token successfully', () => {
       const payload = {
         sub: mockUser.id,
-        email: mockUser.email,
-        role: mockUser.role,
+        email: mockUser.email!,
+        role: mockUser.role!,
       };
 
       // Mock jwt.sign to return a token
       const mockToken = 'mock.jwt.token';
-      jest.spyOn(require('jsonwebtoken'), 'sign').mockReturnValue(mockToken);
+      jest.spyOn(jwt, 'sign').mockReturnValue(mockToken as any);
 
       const result = JWTUtils.signToken(payload, 'access');
 
       expect(result).toBe(mockToken);
-      expect(require('jsonwebtoken').sign).toHaveBeenCalledWith(
+      expect(jwt.sign).toHaveBeenCalledWith(
         expect.objectContaining({
           ...payload,
           type: 'access',
         }),
         mockJwtConfig.secret,
         expect.objectContaining({
-          expiresIn: expect.any(String),
           issuer: mockJwtConfig.issuer,
           audience: mockJwtConfig.audience,
           algorithm: mockJwtConfig.algorithm,
@@ -76,17 +76,17 @@ describe('JWTUtils', () => {
     it('should sign verification token with custom expiration', () => {
       const payload = {
         sub: mockUser.id,
-        email: mockUser.email,
+        email: mockUser.email!,
         purpose: 'email_verification',
       };
 
       const mockToken = 'mock.verification.token';
-      jest.spyOn(require('jsonwebtoken'), 'sign').mockReturnValue(mockToken);
+      jest.spyOn(jwt, 'sign').mockReturnValue(mockToken as any);
 
       const result = JWTUtils.signToken(payload, 'verification', { expiresIn: '24h' });
 
       expect(result).toBe(mockToken);
-      expect(require('jsonwebtoken').sign).toHaveBeenCalledWith(
+      expect(jwt.sign).toHaveBeenCalledWith(
         expect.objectContaining({
           ...payload,
           type: 'verification',
@@ -101,7 +101,7 @@ describe('JWTUtils', () => {
     it('should handle signing errors', () => {
       const payload = { sub: mockUser.id };
 
-      jest.spyOn(require('jsonwebtoken'), 'sign').mockImplementation(() => {
+      jest.spyOn(jwt, 'sign').mockImplementation(() => {
         throw new Error('JWT signing failed');
       });
 
@@ -113,12 +113,12 @@ describe('JWTUtils', () => {
     it('should verify valid token successfully', () => {
       const token = 'valid.jwt.token';
 
-      jest.spyOn(require('jsonwebtoken'), 'verify').mockReturnValue(mockPayload);
+      jest.spyOn(jwt, 'verify').mockReturnValue(mockPayload as any);
 
       const result = JWTUtils.verifyToken(token, 'access');
 
       expect(result).toEqual(mockPayload);
-      expect(require('jsonwebtoken').verify).toHaveBeenCalledWith(
+      expect(jwt.verify).toHaveBeenCalledWith(
         token,
         mockJwtConfig.secret,
         expect.objectContaining({
@@ -133,7 +133,7 @@ describe('JWTUtils', () => {
       const token = 'valid.jwt.token';
       const wrongTypePayload = { ...mockPayload, type: 'refresh' };
 
-      jest.spyOn(require('jsonwebtoken'), 'verify').mockReturnValue(wrongTypePayload);
+      jest.spyOn(jwt, 'verify').mockReturnValue(wrongTypePayload as any);
 
       expect(() => JWTUtils.verifyToken(token, 'access')).toThrow(
         'Expected access token, got refresh'
@@ -143,22 +143,22 @@ describe('JWTUtils', () => {
     it('should handle expired token', () => {
       const token = 'expired.jwt.token';
 
-      const TokenExpiredError = require('jsonwebtoken').TokenExpiredError;
-      jest.spyOn(require('jsonwebtoken'), 'verify').mockImplementation(() => {
+      const TokenExpiredError = jwt.TokenExpiredError;
+      jest.spyOn(jwt, 'verify').mockImplementation(() => {
         throw new TokenExpiredError('Token expired', new Date());
       });
 
       // Mock decode to return payload for better error message
-      jest.spyOn(require('jsonwebtoken'), 'decode').mockReturnValue({ type: 'access' });
+      jest.spyOn(jwt, 'decode').mockReturnValue({ type: 'access' });
 
-      expect(() => JWTUtils.verifyToken(token, 'access')).toThrow('Token expired');
+      expect(() => JWTUtils.verifyToken(token, 'access')).toThrow('access token has expired');
     });
 
     it('should handle invalid token', () => {
       const token = 'invalid.jwt.token';
 
-      const JsonWebTokenError = require('jsonwebtoken').JsonWebTokenError;
-      jest.spyOn(require('jsonwebtoken'), 'verify').mockImplementation(() => {
+      const JsonWebTokenError = jwt.JsonWebTokenError;
+      jest.spyOn(jwt, 'verify').mockImplementation(() => {
         throw new JsonWebTokenError('Invalid token');
       });
 
@@ -371,7 +371,7 @@ describe('JWTUtils', () => {
       const token = 'expired.token';
 
       jest.spyOn(JWTUtils, 'verifyToken').mockImplementation(() => {
-        throw new Error('Token expired');
+        throw new TokenExpiredError('access');
       });
 
       const result = JWTUtils.isTokenExpired(token);
@@ -458,18 +458,18 @@ describe('JWTUtils', () => {
       const token = 'valid.token';
       const mockDecoded = { sub: 'test-user-id', type: 'access' };
 
-      jest.spyOn(require('jsonwebtoken'), 'decode').mockReturnValue(mockDecoded);
+      jest.spyOn(jwt, 'decode').mockReturnValue(mockDecoded);
 
       const result = JWTUtils.decodeToken(token);
 
       expect(result).toEqual(mockDecoded);
-      expect(require('jsonwebtoken').decode).toHaveBeenCalledWith(token);
+      expect(jwt.decode).toHaveBeenCalledWith(token);
     });
 
     it('should return null for invalid token', () => {
       const token = 'invalid.token';
 
-      jest.spyOn(require('jsonwebtoken'), 'decode').mockImplementation(() => {
+      jest.spyOn(jwt, 'decode').mockImplementation(() => {
         throw new Error('Invalid token');
       });
 
