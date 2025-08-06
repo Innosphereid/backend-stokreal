@@ -34,14 +34,10 @@ module.exports = {
   verbose: true,
   clearMocks: true,
   restoreMocks: true,
-  moduleNameMapping: {
+  moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
-  testPathIgnorePatterns: [
-    '/node_modules/',
-    '/dist/',
-    '/build/',
-  ],
+  testPathIgnorePatterns: ['/node_modules/', '/dist/', '/build/'],
   collectCoverage: true,
   coveragePathIgnorePatterns: [
     '/node_modules/',
@@ -49,7 +45,7 @@ module.exports = {
     '/build/',
     '/coverage/',
     '/src/tests/',
-    '/src/**/*.test.ts',
-    '/src/**/*.spec.ts',
+    '/src/.*\\.test\\.ts',
+    '/src/.*\\.spec\\.ts',
   ],
 };
