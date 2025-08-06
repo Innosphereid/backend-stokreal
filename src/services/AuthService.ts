@@ -160,11 +160,14 @@ export class AuthService implements AuthServiceInterface {
         success: true,
       });
 
-      // Create JWT user object
+      // Create JWT user object with full details
       const jwtUser: JWTUser = {
         id: user.id,
         email: user.email,
-        role: 'user', // Default role, can be extended based on user data
+        role: user.role || 'user', // Use user's role from database
+        fullName: user.full_name,
+        isActive: user.is_active,
+        emailVerified: user.email_verified,
       };
 
       // Generate token pair
@@ -177,7 +180,7 @@ export class AuthService implements AuthServiceInterface {
       const authenticatedUser: AuthenticatedUser = {
         id: user.id,
         email: user.email,
-        role: 'user',
+        role: user.role || 'user',
         isActive: user.is_active,
       };
 
@@ -599,6 +602,7 @@ export class AuthService implements AuthServiceInterface {
         subscription_expires_at: userWithPassword.subscription_expires_at,
         is_active: userWithPassword.is_active,
         email_verified: userWithPassword.email_verified ?? false,
+        role: userWithPassword.role || 'user',
         created_at: userWithPassword.created_at,
         updated_at: userWithPassword.updated_at,
         ...(userWithPassword.last_login && { last_login: userWithPassword.last_login }),

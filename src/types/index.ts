@@ -1,4 +1,5 @@
 export type SubscriptionPlan = 'free' | 'premium';
+export type UserRole = 'user' | 'admin';
 export type SortOrder = 'asc' | 'desc';
 
 export interface ApiResponse<T = unknown> {
@@ -37,6 +38,7 @@ export interface User extends DatabaseRecord {
   is_active: boolean;
   email_verified: boolean;
   last_login?: Date | undefined;
+  role: UserRole;
 }
 
 export interface CreateUserRequest {

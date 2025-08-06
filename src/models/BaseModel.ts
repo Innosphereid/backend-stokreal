@@ -24,21 +24,25 @@ export abstract class BaseModel<T extends DatabaseRecord> {
   async findAll(queryParams?: QueryParams): Promise<{ data: T[]; total: number }> {
     const { page = 1, limit = 10, sort = 'created_at', order = 'desc', search } = queryParams || {};
 
-    let query = this.db(this.tableName).select('*');
+    // Build base query for data
+    let dataQuery = this.db(this.tableName).select('*');
+
+    // Build base query for count (without select *)
+    let countQuery = this.db(this.tableName);
 
     // Apply search if implemented by child class
     if (search) {
-      query = this.applySearch(query, search);
+      dataQuery = this.applySearch(dataQuery, search);
+      countQuery = this.applySearch(countQuery, search);
     }
 
     // Get total count for pagination
-    const totalQuery = query.clone();
-    const [result] = await totalQuery.count('* as count');
+    const [result] = await countQuery.count('* as count');
     const total = parseInt((result?.count as string) || '0', 10);
 
-    // Apply pagination and sorting
+    // Apply pagination and sorting to data query
     const offset = (page - 1) * limit;
-    const data = await query.orderBy(sort, order).limit(limit).offset(offset);
+    const data = await dataQuery.orderBy(sort, order).limit(limit).offset(offset);
 
     return { data, total };
   }
