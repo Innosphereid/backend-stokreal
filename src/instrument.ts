@@ -7,4 +7,10 @@ Sentry.init({
   // For example, automatic IP address collection on events
   tracesSampleRate: 1.0,
   sendDefaultPii: true,
+
+  // Enable structured logging
+  enableLogs: true,
+
+  // Disable debug mode to prevent cluttering terminal
+  debug: false,
 });
