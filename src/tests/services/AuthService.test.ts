@@ -7,6 +7,7 @@ import { PasswordUtils } from '../../utils/password';
 import { mailer } from '../../mails';
 import { User, CreateUserRequest } from '../../types';
 import { LoginCredentials } from '../../types/jwt';
+import { Request } from 'express';
 
 // Mock all dependencies
 jest.mock('../../services/UserService');
@@ -44,9 +45,116 @@ describe('AuthService', () => {
       subscription_expires_at: undefined,
       is_active: true,
       email_verified: false,
+      role: 'user',
       created_at: new Date(),
       updated_at: new Date(),
     };
+  });
+
+  describe('getClientIp', () => {
+    it('should return unknown when no request is provided', () => {
+      const ip = authService['getClientIp']();
+      expect(ip).toBe('unknown');
+    });
+
+    it('should extract IP from x-forwarded-for header', () => {
+      const mockReq = {
+        headers: {
+          'x-forwarded-for': '192.168.1.100',
+        },
+        socket: {
+          remoteAddress: '10.0.0.1',
+        },
+        ip: '127.0.0.1',
+      } as any as Request;
+
+      const ip = authService['getClientIp'](mockReq);
+      expect(ip).toBe('192.168.1.100');
+    });
+
+    it('should extract IP from x-real-ip header when x-forwarded-for is not available', () => {
+      const mockReq = {
+        headers: {
+          'x-real-ip': '203.0.113.1',
+        },
+        socket: {
+          remoteAddress: '10.0.0.1',
+        },
+        ip: '127.0.0.1',
+      } as any as Request;
+
+      const ip = authService['getClientIp'](mockReq);
+      expect(ip).toBe('203.0.113.1');
+    });
+
+    it('should extract IP from socket.remoteAddress when headers are not available', () => {
+      const mockReq = {
+        headers: {},
+        socket: {
+          remoteAddress: '10.0.0.1',
+        },
+        ip: '127.0.0.1',
+      } as any as Request;
+
+      const ip = authService['getClientIp'](mockReq);
+      expect(ip).toBe('10.0.0.1');
+    });
+
+    it('should extract IP from req.ip when other sources are not available', () => {
+      const mockReq = {
+        headers: {},
+        socket: {
+          remoteAddress: undefined,
+        },
+        ip: '127.0.0.1',
+      } as any as Request;
+
+      const ip = authService['getClientIp'](mockReq);
+      expect(ip).toBe('127.0.0.1');
+    });
+
+    it('should return unknown when no IP sources are available', () => {
+      const mockReq = {
+        headers: {},
+        socket: {
+          remoteAddress: undefined,
+        },
+        ip: undefined,
+      } as any as Request;
+
+      const ip = authService['getClientIp'](mockReq);
+      expect(ip).toBe('unknown');
+    });
+
+    it('should handle comma-separated x-forwarded-for values and return the first one', () => {
+      const mockReq = {
+        headers: {
+          'x-forwarded-for': '192.168.1.100, 10.0.0.1, 203.0.113.1',
+        },
+        socket: {
+          remoteAddress: '10.0.0.1',
+        },
+        ip: '127.0.0.1',
+      } as any as Request;
+
+      const ip = authService['getClientIp'](mockReq);
+      expect(ip).toBe('192.168.1.100');
+    });
+
+    it('should handle IPv6 addresses', () => {
+      const mockReq = {
+        headers: {
+          'x-forwarded-for': '2001:db8::1',
+        },
+        socket: {
+          remoteAddress: '::1',
+        },
+        ip: '127.0.0.1',
+      } as any as Request;
+
+      const ip = authService['getClientIp'](mockReq);
+      expect(ip).toBe('2001:db8::1');
+    });
   });
 
   describe('register', () => {
