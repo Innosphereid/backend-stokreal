@@ -99,7 +99,7 @@ export class UserController {
     res.status(200).json(result);
   });
 
-  // Get user by ID
+  // Get user by ID (for admin - without sensitive data)
   getUserById = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params;
 
@@ -125,7 +125,24 @@ export class UserController {
       return;
     }
 
-    const response = createSuccessResponse('User retrieved successfully', user);
+    // Remove sensitive data for admin response
+    const sanitizedUser = {
+      id: user.id,
+      email: user.email,
+      full_name: user.full_name,
+      phone: user.phone,
+      whatsapp_number: user.whatsapp_number,
+      subscription_plan: user.subscription_plan,
+      subscription_expires_at: user.subscription_expires_at,
+      is_active: user.is_active,
+      email_verified: user.email_verified,
+      role: user.role,
+      created_at: user.created_at,
+      updated_at: user.updated_at,
+      ...(user.last_login && { last_login: user.last_login }),
+    };
+
+    const response = createSuccessResponse('User retrieved successfully', sanitizedUser);
     res.status(200).json(response);
   });
 

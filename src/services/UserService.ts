@@ -21,8 +21,15 @@ export class UserService {
     const { data: users, total } = await this.userModel.findAll(queryParams);
     const { page = 1, limit = 10 } = queryParams;
 
+    // Remove sensitive data for admin response
+    const sanitizedUsers = users.map(user => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { password_hash, ...userWithoutPassword } = user;
+      return userWithoutPassword as User;
+    });
+
     const meta = calculatePaginationMeta(page, limit, total);
-    return createPaginatedResponse(users, meta, 'Users retrieved successfully');
+    return createPaginatedResponse(sanitizedUsers, meta, 'Users retrieved successfully');
   }
 
   async getUserById(id: string): Promise<User | null> {
