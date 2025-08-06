@@ -171,9 +171,12 @@ process.on('SIGINT', () => {
   process.exit(0);
 });
 
-startServer().catch(error => {
-  logger.error('Failed to start server:', error);
-  process.exit(1);
-});
+// Only start the server if this file is run directly
+if (require.main === module) {
+  startServer().catch(error => {
+    logger.error('Failed to start server:', error);
+    process.exit(1);
+  });
+}
 
 export default app;
