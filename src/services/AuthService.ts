@@ -20,6 +20,7 @@ import {
 import { User, CreateUserRequest } from '@/types';
 import { createResourceConflictError, createError } from '@/utils/errors';
 import { ErrorCodes } from '@/types/errors';
+import { Request } from 'express';
 
 export class AuthService implements AuthServiceInterface {
   private readonly userService: UserService;
@@ -205,9 +206,33 @@ export class AuthService implements AuthServiceInterface {
   /**
    * Get client IP address
    */
-  private getClientIp(): string {
-    // This should be called from a request context
-    // For now, return a placeholder
+  private getClientIp(req?: Request): string {
+    if (!req) {
+      return 'unknown';
+    }
+
+    // Extract IP from request headers
+    const forwardedFor = req.headers['x-forwarded-for'];
+    if (forwardedFor && typeof forwardedFor === 'string' && forwardedFor.length > 0) {
+      const firstIp = forwardedFor.split(',')[0];
+      return firstIp ? firstIp.trim() : 'unknown';
+    }
+
+    const realIp = req.headers['x-real-ip'];
+    if (realIp && typeof realIp === 'string' && realIp.length > 0) {
+      return realIp;
+    }
+
+    const socketIp = req.socket?.remoteAddress;
+    if (socketIp) {
+      return socketIp;
+    }
+
+    const reqIp = req.ip;
+    if (reqIp) {
+      return reqIp;
+    }
+
     return 'unknown';
   }
 
