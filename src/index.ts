@@ -6,6 +6,8 @@ dotenv.config();
 // Register module aliases for runtime
 import 'module-alias/register';
 
+import '@/instrument';
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -16,7 +18,8 @@ import cookieParser from 'cookie-parser';
 import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerUi from 'swagger-ui-express';
 
-import { errorHandler } from '@/middleware/errorHandler';
+import * as Sentry from '@sentry/node';
+import { errorHandler as localErrorHandler } from '@/middleware/errorHandler';
 import { notFoundHandler } from '@/middleware/notFoundHandler';
 import { cookieMiddleware, cookieValidationMiddleware } from '@/middleware/cookieMiddleware';
 import { corsMiddleware } from '@/middleware/corsMiddleware';
@@ -67,40 +70,6 @@ app.use(
   })
 );
 
-/**
- * @swagger
- * /health:
- *   get:
- *     summary: Health check
- *     tags: [Health]
- *     description: Check the health status of the API server
- *     responses:
- *       200:
- *         description: Server is healthy
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 status:
- *                   type: string
- *                   example: "OK"
- *                 timestamp:
- *                   type: string
- *                   format: date-time
- *                   example: "2024-01-01T00:00:00.000Z"
- *                 uptime:
- *                   type: number
- *                   example: 123.456
- *                 environment:
- *                   type: string
- *                   example: "development"
- *             example:
- *               status: "OK"
- *               timestamp: "2024-01-01T00:00:00.000Z"
- *               uptime: 123.456
- *               environment: "development"
- */
 app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'OK',
@@ -113,9 +82,12 @@ app.get('/health', (req, res) => {
 // API routes
 app.use(process.env.API_PREFIX || '/api/v1', apiRoutes);
 
+// Sentry error handler (MUST be after all routes)
+Sentry.setupExpressErrorHandler(app);
+
 // Error handling middleware
 app.use(notFoundHandler);
-app.use(errorHandler);
+app.use(localErrorHandler);
 
 // Start server
 const startServer = async (): Promise<void> => {
