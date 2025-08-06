@@ -57,7 +57,7 @@ const userController = new UserController();
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.get('/profile', authenticateToken(), userController.getProfile);
+router.get('/profile', authenticateToken(), inputSanitizer, userController.getProfile);
 
 /**
  * @swagger
