@@ -70,8 +70,8 @@ export class ProfileValidator {
       return ['Phone number must be a string'];
     }
 
-    const sanitizedPhone = this.sanitizePhone(phone);
-    if (!this.isValidIndonesianPhone(sanitizedPhone)) {
+    const sanitizedPhone = this.sanitizeContactNumber(phone);
+    if (!this.isValidIndonesianContactNumber(sanitizedPhone)) {
       return ['Phone number must be in valid Indonesian format (+62xxx or 08xxx)'];
     }
 
@@ -88,8 +88,8 @@ export class ProfileValidator {
       return ['WhatsApp number must be a string'];
     }
 
-    const sanitizedWhatsApp = this.sanitizeWhatsApp(whatsapp);
-    if (!this.isValidIndonesianWhatsApp(sanitizedWhatsApp)) {
+    const sanitizedWhatsApp = this.sanitizeContactNumber(whatsapp);
+    if (!this.isValidIndonesianContactNumber(sanitizedWhatsApp)) {
       return ['WhatsApp number must be in valid Indonesian format (+62xxx or 08xxx)'];
     }
 
@@ -107,11 +107,11 @@ export class ProfileValidator {
     }
 
     if (data.phone !== undefined) {
-      sanitized.phone = this.sanitizePhone(data.phone);
+      sanitized.phone = this.sanitizeContactNumber(data.phone);
     }
 
     if (data.whatsapp_number !== undefined) {
-      sanitized.whatsapp_number = this.sanitizeWhatsApp(data.whatsapp_number);
+      sanitized.whatsapp_number = this.sanitizeContactNumber(data.whatsapp_number);
     }
 
     return sanitized;
@@ -125,69 +125,26 @@ export class ProfileValidator {
   }
 
   /**
-   * Sanitize phone number
-   */
-  private static sanitizePhone(input: string): string {
-    return this.sanitizeContactNumber(input);
-  }
-
-  /**
-   * Sanitize WhatsApp number
-   */
-  private static sanitizeWhatsApp(input: string): string {
-    return this.sanitizeContactNumber(input);
-  }
-
-  /**
    * Sanitize contact number (phone or WhatsApp)
    */
   private static sanitizeContactNumber(input: string): string {
-    // Remove spaces and keep only digits, +, and -
-    const sanitized = input.trim().replace(/[^\d\s\-+]/g, '');
+    // Remove spaces, dashes, and other separators, keep only digits and +
+    const sanitized = input.trim().replace(/[\s\-().]/g, '');
 
-    // If it starts with +62, keep the +62 format
-    if (sanitized.startsWith('+62')) {
-      return sanitized.replace(/\s/g, '');
-    }
-
-    // If it starts with 08, keep the 08 format
-    if (sanitized.startsWith('08')) {
-      return sanitized.replace(/\s/g, '');
-    }
-
-    // Otherwise, just remove spaces
-    return sanitized.replace(/\s/g, '');
+    // Return the sanitized string (both +62 and 08 formats are preserved)
+    return sanitized;
   }
 
   /**
-   * Validate Indonesian phone number format
+   * Validate Indonesian contact number format (phone or WhatsApp)
    */
-  private static isValidIndonesianPhone(phone: string): boolean {
-    // Remove all non-digit characters for validation
-    const digits = phone.replace(/\D/g, '');
-
-    // Check if it's a valid Indonesian phone number
+  private static isValidIndonesianContactNumber(contact: string): boolean {
+    // Check if it's a valid Indonesian contact number
     // +62 format: +62 followed by 8-12 digits
     // 08 format: 08 followed by 8-10 digits
     const plus62Pattern = /^\+62\d{8,12}$/;
     const zero8Pattern = /^08\d{8,10}$/;
 
-    return plus62Pattern.test(phone) || zero8Pattern.test(digits);
-  }
-
-  /**
-   * Validate Indonesian WhatsApp number format
-   */
-  private static isValidIndonesianWhatsApp(whatsapp: string): boolean {
-    // Remove all non-digit characters for validation
-    const digits = whatsapp.replace(/\D/g, '');
-
-    // Check if it's a valid Indonesian WhatsApp number
-    // +62 format: +62 followed by 8-12 digits
-    // 08 format: 08 followed by 8-10 digits
-    const plus62Pattern = /^\+62\d{8,12}$/;
-    const zero8Pattern = /^08\d{8,10}$/;
-
-    return plus62Pattern.test(whatsapp) || zero8Pattern.test(digits);
+    return plus62Pattern.test(contact) || zero8Pattern.test(contact);
   }
 }
