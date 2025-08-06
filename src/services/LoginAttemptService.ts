@@ -24,6 +24,18 @@ export class LoginAttemptService {
   private readonly tableName = 'user_login_attempts';
 
   /**
+   * Validate email format
+   */
+  private isValidEmail(email: string): boolean {
+    if (!email || typeof email !== 'string') {
+      return false;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email) && email.length <= 255;
+  }
+
+  /**
    * Record a login attempt
    */
   async recordAttempt(data: {
@@ -35,6 +47,15 @@ export class LoginAttemptService {
     failureReason?: string;
   }): Promise<void> {
     try {
+      // Validate email format before storing
+      if (!this.isValidEmail(data.email)) {
+        logger.warn(`Invalid email format rejected: ${data.email}`, {
+          ipAddress: data.ipAddress,
+          success: data.success,
+        });
+        return; // Don't store invalid emails
+      }
+
       await db(this.tableName).insert({
         user_id: data.userId,
         email: data.email.toLowerCase(),
