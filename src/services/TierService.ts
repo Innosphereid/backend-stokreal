@@ -1,9 +1,21 @@
 import { SubscriptionPlan } from '../types';
 import { UserModel } from '../models/UserModel';
 import { TierFeatureModel } from '../models/TierFeatureModel';
-import { TierHistoryModel } from '../models/TierHistoryModel';
+import { TierHistoryModel, TierHistoryRecord } from '../models/TierHistoryModel';
 import { TierFeatureDefinitionsModel } from '../models/TierFeatureDefinitionsModel';
 import { logger } from '../utils/logger';
+
+// Tier feature and usage interfaces
+export interface TierFeatureValue {
+  unlimited?: boolean;
+  limit?: number;
+  enabled?: boolean;
+}
+
+export interface UserFeatureUsage {
+  current: number;
+  limit: number | null;
+}
 
 export interface TierStatus {
   user_id: string;
@@ -13,8 +25,8 @@ export interface TierStatus {
   days_until_expiration: number | null;
   grace_period_active: boolean;
   grace_period_expires_at: Date | null;
-  tier_features: Record<string, any>;
-  current_usage: Record<string, any>;
+  tier_features: Record<string, TierFeatureValue>;
+  current_usage: Record<string, UserFeatureUsage>;
 }
 
 export interface TierChangeData {
@@ -58,7 +70,16 @@ export class TierService {
       : null;
 
     const tierFeatures = await this.getTierFeatures(user.subscription_plan);
-    const userFeatureUsage = await this.tierFeatureModel.getUserFeatureUsage(userId);
+    const userFeatureUsageArr = await this.tierFeatureModel.getUserFeatureUsage(userId);
+
+    // Convert array to Record
+    const userFeatureUsage: Record<string, UserFeatureUsage> = {};
+    for (const row of userFeatureUsageArr) {
+      userFeatureUsage[row.feature_name] = {
+        current: row.current_usage,
+        limit: row.usage_limit,
+      };
+    }
 
     return {
       user_id: userId,
@@ -146,7 +167,7 @@ export class TierService {
   /**
    * Record tier change in history
    */
-  async recordTierChange(data: TierChangeData): Promise<any> {
+  async recordTierChange(data: TierChangeData): Promise<TierHistoryRecord> {
     const tierChangeRecord = {
       ...data,
       effective_date: new Date(),
@@ -158,17 +179,19 @@ export class TierService {
   /**
    * Get tier features for a specific subscription plan
    */
-  async getTierFeatures(tier: SubscriptionPlan): Promise<Record<string, any>> {
+  async getTierFeatures(tier: SubscriptionPlan): Promise<Record<string, TierFeatureValue>> {
     const features = await this.tierFeatureDefinitionsModel.findBy({ tier });
-    const tierFeatures: Record<string, any> = {};
+    const tierFeatures: Record<string, TierFeatureValue> = {};
 
     for (const feature of features) {
       if (feature.feature_limit === null) {
-        tierFeatures[feature.feature_name] = feature.feature_enabled ? 'unlimited' : false;
+        tierFeatures[feature.feature_name] = feature.feature_enabled
+          ? { unlimited: true }
+          : { enabled: false };
       } else {
         tierFeatures[feature.feature_name] = feature.feature_enabled
-          ? feature.feature_limit
-          : false;
+          ? { limit: feature.feature_limit }
+          : { enabled: false };
       }
     }
 

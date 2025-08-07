@@ -74,9 +74,7 @@ describe('tierValidationMiddleware', () => {
         feature: 'analytics_access',
       });
 
-      mockTierService.prototype.getUserTierStatus.mockResolvedValue(
-        createMockTierStatus()
-      );
+      mockTierService.prototype.getUserTierStatus.mockResolvedValue(createMockTierStatus());
 
       mockTierFeatureService.prototype.validateFeatureAccess.mockResolvedValue(
         createMockFeatureValidationResult()
@@ -143,9 +141,7 @@ describe('tierValidationMiddleware', () => {
         feature: 'analytics_access',
       });
 
-      mockTierService.prototype.getUserTierStatus.mockResolvedValue(
-        createMockTierStatus()
-      );
+      mockTierService.prototype.getUserTierStatus.mockResolvedValue(createMockTierStatus());
 
       mockTierFeatureService.prototype.validateFeatureAccess.mockResolvedValue(
         createMockFeatureValidationResult()
@@ -245,9 +241,7 @@ describe('tierValidationMiddleware', () => {
         requiredTier: 'premium',
       });
 
-      mockTierService.prototype.getUserTierStatus.mockResolvedValue(
-        createMockTierStatus()
-      );
+      mockTierService.prototype.getUserTierStatus.mockResolvedValue(createMockTierStatus());
 
       // Act
       await middleware(mockRequest as Request, mockResponse as Response, mockNext);
@@ -347,9 +341,7 @@ describe('tierValidationMiddleware', () => {
         requiredTier: 'premium',
       });
 
-      mockTierService.prototype.getUserTierStatus.mockRejectedValue(
-        new Error('User not found')
-      );
+      mockTierService.prototype.getUserTierStatus.mockRejectedValue(new Error('User not found'));
 
       // Act
       await middleware(mockRequest as Request, mockResponse as Response, mockNext);

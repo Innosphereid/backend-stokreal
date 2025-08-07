@@ -24,6 +24,38 @@ export interface UsageThresholdResult {
   warning_message: string | null;
 }
 
+// Database operation result interfaces
+export interface TierFeatureRecord {
+  id: string;
+  user_id: string;
+  feature_name: string;
+  current_usage: number;
+  usage_limit: number | null;
+  last_reset_at: Date;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface IncrementResult {
+  current_usage: number;
+  updated_at: Date;
+}
+
+export interface CreateFeatureRecordResult {
+  id: string;
+  user_id: string;
+  feature_name: string;
+  current_usage: number;
+  usage_limit: number | null;
+  last_reset_at: Date;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface ResetCountersResult {
+  affectedRows: number;
+}
+
 export class TierFeatureService {
   private readonly tierFeatureModel: TierFeatureModel;
   private readonly tierFeatureDefinitionsModel: TierFeatureDefinitionsModel;
@@ -41,7 +73,7 @@ export class TierFeatureService {
     featureName: string,
     increment: number,
     atomic: boolean = false
-  ): Promise<any> {
+  ): Promise<IncrementResult> {
     try {
       if (atomic) {
         return await this.tierFeatureModel.incrementUsageAtomic(userId, featureName, increment);
@@ -86,7 +118,7 @@ export class TierFeatureService {
       const featureDefinition = featureDefinitions[0];
 
       // Check if feature is enabled
-      if (!featureDefinition.feature_enabled) {
+      if (!featureDefinition?.feature_enabled) {
         return {
           access_granted: false,
           feature_available: false,
@@ -104,7 +136,7 @@ export class TierFeatureService {
         userFeatureUsage[row.feature_name] = { current: row.current_usage, limit: row.usage_limit };
       }
       const currentUsage = userFeatureUsage[featureName]?.current || 0;
-      const limit = featureDefinition.feature_limit;
+      const limit = featureDefinition?.feature_limit;
 
       // Check if usage is within limits
       const usageWithinLimits = limit === null || currentUsage < limit;
@@ -151,7 +183,7 @@ export class TierFeatureService {
   /**
    * Reset usage counters based on type
    */
-  async resetUsageCounters(resetType: string, date: Date): Promise<any> {
+  async resetUsageCounters(resetType: string, date: Date): Promise<ResetCountersResult> {
     try {
       return await this.tierFeatureModel.resetUsageCounters(resetType, date);
     } catch (error) {
@@ -241,7 +273,7 @@ export class TierFeatureService {
     userId: string,
     featureName: string,
     usageLimit: number | null
-  ): Promise<any> {
+  ): Promise<CreateFeatureRecordResult> {
     try {
       const createData: {
         user_id: string;
