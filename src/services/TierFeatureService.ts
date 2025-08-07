@@ -98,7 +98,11 @@ export class TierFeatureService {
       }
 
       // Get current usage
-      const userFeatureUsage = await this.tierFeatureModel.getUserFeatureUsage(userId);
+      const userFeatureUsageArr = await this.tierFeatureModel.getUserFeatureUsage(userId);
+      const userFeatureUsage: Record<string, FeatureUsage> = {};
+      for (const row of userFeatureUsageArr) {
+        userFeatureUsage[row.feature_name] = { current: row.current_usage, limit: row.usage_limit };
+      }
       const currentUsage = userFeatureUsage[featureName]?.current || 0;
       const limit = featureDefinition.feature_limit;
 
@@ -132,7 +136,12 @@ export class TierFeatureService {
    */
   async getUserFeatureUsage(userId: string): Promise<Record<string, FeatureUsage>> {
     try {
-      return await this.tierFeatureModel.getUserFeatureUsage(userId);
+      const usageArr = await this.tierFeatureModel.getUserFeatureUsage(userId);
+      const usage: Record<string, FeatureUsage> = {};
+      for (const row of usageArr) {
+        usage[row.feature_name] = { current: row.current_usage, limit: row.usage_limit };
+      }
+      return usage;
     } catch (error) {
       logger.error(`Failed to get user feature usage for user ${userId}:`, error);
       throw error;
@@ -160,7 +169,11 @@ export class TierFeatureService {
     threshold: number
   ): Promise<UsageThresholdResult> {
     try {
-      const userFeatureUsage = await this.tierFeatureModel.getUserFeatureUsage(userId);
+      const userFeatureUsageArr = await this.tierFeatureModel.getUserFeatureUsage(userId);
+      const userFeatureUsage: Record<string, FeatureUsage> = {};
+      for (const row of userFeatureUsageArr) {
+        userFeatureUsage[row.feature_name] = { current: row.current_usage, limit: row.usage_limit };
+      }
       const featureUsage = userFeatureUsage[featureName];
 
       if (!featureUsage) {
@@ -230,13 +243,22 @@ export class TierFeatureService {
     usageLimit: number | null
   ): Promise<any> {
     try {
-      return await this.tierFeatureModel.create({
+      const createData: {
+        user_id: string;
+        feature_name: string;
+        current_usage: number;
+        usage_limit?: number;
+        last_reset_at: Date;
+      } = {
         user_id: userId,
         feature_name: featureName,
         current_usage: 0,
-        usage_limit: usageLimit,
         last_reset_at: new Date(),
-      });
+      };
+      if (usageLimit !== null) {
+        createData.usage_limit = usageLimit;
+      }
+      return await this.tierFeatureModel.create(createData);
     } catch (error) {
       logger.error(
         `Failed to create user feature record for user ${userId}, feature ${featureName}:`,
