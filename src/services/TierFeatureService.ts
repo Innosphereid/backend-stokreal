@@ -25,8 +25,8 @@ export interface UsageThresholdResult {
 }
 
 export class TierFeatureService {
-  private tierFeatureModel: TierFeatureModel;
-  private tierFeatureDefinitionsModel: TierFeatureDefinitionsModel;
+  private readonly tierFeatureModel: TierFeatureModel;
+  private readonly tierFeatureDefinitionsModel: TierFeatureDefinitionsModel;
 
   constructor() {
     this.tierFeatureModel = new TierFeatureModel();

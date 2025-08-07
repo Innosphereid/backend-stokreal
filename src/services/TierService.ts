@@ -27,10 +27,10 @@ export interface TierChangeData {
 }
 
 export class TierService {
-  private userModel: UserModel;
-  private tierFeatureModel: TierFeatureModel;
-  private tierHistoryModel: TierHistoryModel;
-  private tierFeatureDefinitionsModel: TierFeatureDefinitionsModel;
+  private readonly userModel: UserModel;
+  private readonly tierFeatureModel: TierFeatureModel;
+  private readonly tierHistoryModel: TierHistoryModel;
+  private readonly tierFeatureDefinitionsModel: TierFeatureDefinitionsModel;
 
   constructor() {
     this.userModel = new UserModel();

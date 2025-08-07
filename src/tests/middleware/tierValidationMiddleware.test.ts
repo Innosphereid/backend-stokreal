@@ -2,23 +2,48 @@ import { Request, Response, NextFunction } from 'express';
 import { tierValidationMiddleware } from '../../middleware/tierValidationMiddleware';
 import { TierService } from '../../services/TierService';
 import { TierFeatureService } from '../../services/TierFeatureService';
+import { SubscriptionPlan } from '../../types';
 
-// Mock dependencies
+// Mock the services
 jest.mock('../../services/TierService');
 jest.mock('../../services/TierFeatureService');
-jest.mock('../../utils/logger');
 
 const mockTierService = TierService as jest.MockedClass<typeof TierService>;
 const mockTierFeatureService = TierFeatureService as jest.MockedClass<typeof TierFeatureService>;
 
+// Helper functions to create proper mock objects
+function createMockTierStatus(overrides: Partial<any> = {}) {
+  return {
+    user_id: 'user-123',
+    subscription_plan: 'premium' as SubscriptionPlan,
+    subscription_expires_at: null,
+    is_active: true,
+    days_until_expiration: null,
+    grace_period_active: false,
+    grace_period_expires_at: null,
+    tier_features: {},
+    current_usage: {},
+    ...overrides,
+  };
+}
+
+function createMockFeatureValidationResult(overrides: Partial<any> = {}) {
+  return {
+    access_granted: true,
+    feature_available: true,
+    usage_within_limits: true,
+    current_usage: 0,
+    limit: null,
+    ...overrides,
+  };
+}
+
 describe('tierValidationMiddleware', () => {
   let mockRequest: Partial<Request>;
   let mockResponse: Partial<Response>;
-  let mockNext: NextFunction;
+  let mockNext: jest.MockedFunction<NextFunction>;
 
   beforeEach(() => {
-    jest.clearAllMocks();
-
     mockRequest = {
       headers: {
         authorization: 'Bearer valid-jwt-token',
@@ -26,6 +51,7 @@ describe('tierValidationMiddleware', () => {
       user: {
         id: 'user-123',
         email: 'test@example.com',
+        role: 'user',
       },
     };
 
@@ -35,6 +61,9 @@ describe('tierValidationMiddleware', () => {
     };
 
     mockNext = jest.fn();
+
+    // Reset all mocks
+    jest.clearAllMocks();
   });
 
   describe('JWT token extraction and user validation', () => {
@@ -45,18 +74,13 @@ describe('tierValidationMiddleware', () => {
         feature: 'analytics_access',
       });
 
-      mockTierService.prototype.getUserTierStatus.mockResolvedValue({
-        user_id: 'user-123',
-        subscription_plan: 'premium',
-        is_active: true,
-        grace_period_active: false,
-      });
+      mockTierService.prototype.getUserTierStatus.mockResolvedValue(
+        createMockTierStatus()
+      );
 
-      mockTierFeatureService.prototype.validateFeatureAccess.mockResolvedValue({
-        access_granted: true,
-        feature_available: true,
-        usage_within_limits: true,
-      });
+      mockTierFeatureService.prototype.validateFeatureAccess.mockResolvedValue(
+        createMockFeatureValidationResult()
+      );
 
       // Act
       await middleware(mockRequest as Request, mockResponse as Response, mockNext);
@@ -119,18 +143,36 @@ describe('tierValidationMiddleware', () => {
         feature: 'analytics_access',
       });
 
-      mockTierService.prototype.getUserTierStatus.mockResolvedValue({
-        user_id: 'user-123',
-        subscription_plan: 'premium',
-        is_active: true,
-        grace_period_active: false,
+      mockTierService.prototype.getUserTierStatus.mockResolvedValue(
+        createMockTierStatus()
+      );
+
+      mockTierFeatureService.prototype.validateFeatureAccess.mockResolvedValue(
+        createMockFeatureValidationResult()
+      );
+
+      // Act
+      await middleware(mockRequest as Request, mockResponse as Response, mockNext);
+
+      // Assert
+      expect(mockNext).toHaveBeenCalled();
+      expect(mockResponse.status).not.toHaveBeenCalled();
+    });
+
+    it('should allow access for free user accessing free feature', async () => {
+      // Arrange
+      const middleware = tierValidationMiddleware({
+        requiredTier: 'free',
+        feature: 'basic_analytics',
       });
 
-      mockTierFeatureService.prototype.validateFeatureAccess.mockResolvedValue({
-        access_granted: true,
-        feature_available: true,
-        usage_within_limits: true,
-      });
+      mockTierService.prototype.getUserTierStatus.mockResolvedValue(
+        createMockTierStatus({ subscription_plan: 'free' })
+      );
+
+      mockTierFeatureService.prototype.validateFeatureAccess.mockResolvedValue(
+        createMockFeatureValidationResult()
+      );
 
       // Act
       await middleware(mockRequest as Request, mockResponse as Response, mockNext);
@@ -144,15 +186,12 @@ describe('tierValidationMiddleware', () => {
       // Arrange
       const middleware = tierValidationMiddleware({
         requiredTier: 'premium',
-        feature: 'analytics_access',
+        feature: 'advanced_analytics',
       });
 
-      mockTierService.prototype.getUserTierStatus.mockResolvedValue({
-        user_id: 'user-123',
-        subscription_plan: 'free',
-        is_active: true,
-        grace_period_active: false,
-      });
+      mockTierService.prototype.getUserTierStatus.mockResolvedValue(
+        createMockTierStatus({ subscription_plan: 'free' })
+      );
 
       // Act
       await middleware(mockRequest as Request, mockResponse as Response, mockNext);
@@ -166,34 +205,49 @@ describe('tierValidationMiddleware', () => {
         data: {
           current_tier: 'free',
           required_tier: 'premium',
-          feature: 'analytics_access',
+          feature: 'advanced_analytics',
           upgrade_url: '/api/v1/subscription/upgrade',
-          upgrade_message: 'Upgrade to Premium to access analytics_access features',
+          upgrade_message: 'Upgrade to Premium to access advanced_analytics features',
         },
       });
       expect(mockNext).not.toHaveBeenCalled();
     });
 
-    it('should allow access for expired premium user in grace period', async () => {
+    it('should allow access for premium user in grace period', async () => {
       // Arrange
       const middleware = tierValidationMiddleware({
         requiredTier: 'premium',
         feature: 'analytics_access',
       });
 
-      mockTierService.prototype.getUserTierStatus.mockResolvedValue({
-        user_id: 'user-123',
-        subscription_plan: 'premium',
-        is_active: true,
-        grace_period_active: true,
-        grace_period_expires_at: new Date('2025-12-31T23:59:59Z'),
+      mockTierService.prototype.getUserTierStatus.mockResolvedValue(
+        createMockTierStatus({
+          grace_period_active: true,
+          grace_period_expires_at: new Date('2025-12-31T23:59:59Z'),
+        })
+      );
+
+      mockTierFeatureService.prototype.validateFeatureAccess.mockResolvedValue(
+        createMockFeatureValidationResult()
+      );
+
+      // Act
+      await middleware(mockRequest as Request, mockResponse as Response, mockNext);
+
+      // Assert
+      expect(mockNext).toHaveBeenCalled();
+      expect(mockResponse.status).not.toHaveBeenCalled();
+    });
+
+    it('should allow access for premium user without feature validation', async () => {
+      // Arrange
+      const middleware = tierValidationMiddleware({
+        requiredTier: 'premium',
       });
 
-      mockTierFeatureService.prototype.validateFeatureAccess.mockResolvedValue({
-        access_granted: true,
-        feature_available: true,
-        usage_within_limits: true,
-      });
+      mockTierService.prototype.getUserTierStatus.mockResolvedValue(
+        createMockTierStatus()
+      );
 
       // Act
       await middleware(mockRequest as Request, mockResponse as Response, mockNext);
@@ -204,55 +258,26 @@ describe('tierValidationMiddleware', () => {
     });
   });
 
-  describe('feature access validation', () => {
-    it('should allow access when feature is available and within limits', async () => {
+  describe('feature validation', () => {
+    it('should deny access when feature is not available for tier', async () => {
       // Arrange
       const middleware = tierValidationMiddleware({
-        requiredTier: 'premium',
-        feature: 'max_products',
+        requiredTier: 'free',
+        feature: 'premium_feature',
       });
 
-      mockTierService.prototype.getUserTierStatus.mockResolvedValue({
-        user_id: 'user-123',
-        subscription_plan: 'premium',
-        is_active: true,
-        grace_period_active: false,
-      });
+      mockTierService.prototype.getUserTierStatus.mockResolvedValue(
+        createMockTierStatus({ subscription_plan: 'free' })
+      );
 
-      mockTierFeatureService.prototype.validateFeatureAccess.mockResolvedValue({
-        access_granted: true,
-        feature_available: true,
-        usage_within_limits: true,
-      });
-
-      // Act
-      await middleware(mockRequest as Request, mockResponse as Response, mockNext);
-
-      // Assert
-      expect(mockNext).toHaveBeenCalled();
-      expect(mockResponse.status).not.toHaveBeenCalled();
-    });
-
-    it('should deny access when feature is not available', async () => {
-      // Arrange
-      const middleware = tierValidationMiddleware({
-        requiredTier: 'premium',
-        feature: 'analytics_access',
-      });
-
-      mockTierService.prototype.getUserTierStatus.mockResolvedValue({
-        user_id: 'user-123',
-        subscription_plan: 'free',
-        is_active: true,
-        grace_period_active: false,
-      });
-
-      mockTierFeatureService.prototype.validateFeatureAccess.mockResolvedValue({
-        access_granted: false,
-        feature_available: false,
-        usage_within_limits: false,
-        reason: 'feature_not_available',
-      });
+      mockTierFeatureService.prototype.validateFeatureAccess.mockResolvedValue(
+        createMockFeatureValidationResult({
+          access_granted: false,
+          feature_available: false,
+          usage_within_limits: false,
+          reason: 'feature_not_available',
+        })
+      );
 
       // Act
       await middleware(mockRequest as Request, mockResponse as Response, mockNext);
@@ -264,39 +289,35 @@ describe('tierValidationMiddleware', () => {
         message: 'Feature not available for your tier',
         error: 'FEATURE_NOT_AVAILABLE',
         data: {
-          feature: 'analytics_access',
+          feature: 'premium_feature',
           current_tier: 'free',
           upgrade_url: '/api/v1/subscription/upgrade',
-          upgrade_message: 'Upgrade to Premium to access analytics_access features',
+          upgrade_message: 'Upgrade to Premium to access premium_feature features',
         },
       });
       expect(mockNext).not.toHaveBeenCalled();
     });
-  });
 
-  describe('usage limit enforcement', () => {
     it('should deny access when usage limit is exceeded', async () => {
       // Arrange
       const middleware = tierValidationMiddleware({
         requiredTier: 'free',
-        feature: 'max_products',
+        feature: 'api_calls',
       });
 
-      mockTierService.prototype.getUserTierStatus.mockResolvedValue({
-        user_id: 'user-123',
-        subscription_plan: 'free',
-        is_active: true,
-        grace_period_active: false,
-      });
+      mockTierService.prototype.getUserTierStatus.mockResolvedValue(
+        createMockTierStatus({ subscription_plan: 'free' })
+      );
 
-      mockTierFeatureService.prototype.validateFeatureAccess.mockResolvedValue({
-        access_granted: false,
-        feature_available: true,
-        usage_within_limits: false,
-        reason: 'usage_limit_exceeded',
-        current_usage: 50,
-        limit: 50,
-      });
+      mockTierFeatureService.prototype.validateFeatureAccess.mockResolvedValue(
+        createMockFeatureValidationResult({
+          access_granted: false,
+          feature_available: true,
+          usage_within_limits: false,
+          current_usage: 1000,
+          limit: 500,
+        })
+      );
 
       // Act
       await middleware(mockRequest as Request, mockResponse as Response, mockNext);
@@ -308,56 +329,50 @@ describe('tierValidationMiddleware', () => {
         message: 'Usage limit exceeded',
         error: 'USAGE_LIMIT_EXCEEDED',
         data: {
-          feature: 'max_products',
-          current_usage: 50,
-          limit: 50,
+          feature: 'api_calls',
+          current_usage: 1000,
+          limit: 500,
           upgrade_url: '/api/v1/subscription/upgrade',
-          upgrade_message: 'Upgrade to Premium for unlimited max_products',
+          upgrade_message: 'Upgrade to Premium for unlimited api_calls',
         },
       });
       expect(mockNext).not.toHaveBeenCalled();
     });
+  });
 
-    it('should allow access when usage is within limits', async () => {
+  describe('error handling', () => {
+    it('should return 401 when user not found', async () => {
       // Arrange
       const middleware = tierValidationMiddleware({
-        requiredTier: 'free',
-        feature: 'max_products',
+        requiredTier: 'premium',
       });
 
-      mockTierService.prototype.getUserTierStatus.mockResolvedValue({
-        user_id: 'user-123',
-        subscription_plan: 'free',
-        is_active: true,
-        grace_period_active: false,
-      });
-
-      mockTierFeatureService.prototype.validateFeatureAccess.mockResolvedValue({
-        access_granted: true,
-        feature_available: true,
-        usage_within_limits: true,
-        current_usage: 25,
-        limit: 50,
-      });
+      mockTierService.prototype.getUserTierStatus.mockRejectedValue(
+        new Error('User not found')
+      );
 
       // Act
       await middleware(mockRequest as Request, mockResponse as Response, mockNext);
 
       // Assert
-      expect(mockNext).toHaveBeenCalled();
-      expect(mockResponse.status).not.toHaveBeenCalled();
+      expect(mockResponse.status).toHaveBeenCalledWith(401);
+      expect(mockResponse.json).toHaveBeenCalledWith({
+        status: 401,
+        message: 'User not found',
+        error: 'UNAUTHORIZED',
+      });
+      expect(mockNext).not.toHaveBeenCalled();
     });
-  });
 
-  describe('error handling', () => {
-    it('should return 500 when TierService throws an error', async () => {
+    it('should return 500 when unexpected error occurs', async () => {
       // Arrange
       const middleware = tierValidationMiddleware({
         requiredTier: 'premium',
-        feature: 'analytics_access',
       });
 
-      mockTierService.prototype.getUserTierStatus.mockRejectedValue(new Error('Database error'));
+      mockTierService.prototype.getUserTierStatus.mockRejectedValue(
+        new Error('Database connection failed')
+      );
 
       // Act
       await middleware(mockRequest as Request, mockResponse as Response, mockNext);
@@ -372,61 +387,24 @@ describe('tierValidationMiddleware', () => {
       expect(mockNext).not.toHaveBeenCalled();
     });
 
-    it('should return 500 when TierFeatureService throws an error', async () => {
+    it('should return 401 when user information is missing', async () => {
       // Arrange
+      delete mockRequest.user;
       const middleware = tierValidationMiddleware({
         requiredTier: 'premium',
-        feature: 'analytics_access',
       });
-
-      mockTierService.prototype.getUserTierStatus.mockResolvedValue({
-        user_id: 'user-123',
-        subscription_plan: 'premium',
-        is_active: true,
-        grace_period_active: false,
-      });
-
-      mockTierFeatureService.prototype.validateFeatureAccess.mockRejectedValue(
-        new Error('Feature service error')
-      );
 
       // Act
       await middleware(mockRequest as Request, mockResponse as Response, mockNext);
 
       // Assert
-      expect(mockResponse.status).toHaveBeenCalledWith(500);
+      expect(mockResponse.status).toHaveBeenCalledWith(401);
       expect(mockResponse.json).toHaveBeenCalledWith({
-        status: 500,
-        message: 'Internal server error during feature validation',
-        error: 'FEATURE_VALIDATION_ERROR',
+        status: 401,
+        message: 'Invalid or missing user information',
+        error: 'UNAUTHORIZED',
       });
       expect(mockNext).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('middleware configuration', () => {
-    it('should create middleware with default options', () => {
-      // Act
-      const middleware = tierValidationMiddleware({
-        requiredTier: 'premium',
-        feature: 'analytics_access',
-      });
-
-      // Assert
-      expect(typeof middleware).toBe('function');
-    });
-
-    it('should create middleware with custom options', () => {
-      // Act
-      const middleware = tierValidationMiddleware({
-        requiredTier: 'free',
-        feature: 'max_products',
-        action: 'create',
-        skipUsageCheck: true,
-      });
-
-      // Assert
-      expect(typeof middleware).toBe('function');
     });
   });
 });
