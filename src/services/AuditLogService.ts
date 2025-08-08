@@ -81,6 +81,39 @@ export class AuditLogService {
   }
 
   /**
+   * Generic log method for tier-related events
+   */
+  async log(data: {
+    userId?: string;
+    action: string;
+    resource: string;
+    details?: Record<string, any>;
+    ipAddress?: string;
+    userAgent?: string;
+    success?: boolean;
+  }): Promise<void> {
+    try {
+      const logEntry: AuditLogEntry = {
+        user_id: data.userId,
+        action: data.action,
+        resource: data.resource,
+        details: data.details || {},
+        ip_address: data.ipAddress,
+        user_agent: data.userAgent,
+        success: data.success !== undefined ? data.success : true,
+      };
+
+      await this.createLogEntry(logEntry);
+      logger.info(
+        `Audit log: ${data.action} for user ${data.userId || 'unknown'} on resource ${data.resource}`
+      );
+    } catch (error) {
+      logger.error('Failed to create audit log entry:', error);
+      // Don't throw error to avoid breaking the main flow
+    }
+  }
+
+  /**
    * Create a log entry in the database
    */
   private async createLogEntry(entry: AuditLogEntry): Promise<void> {

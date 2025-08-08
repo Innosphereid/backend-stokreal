@@ -4,6 +4,7 @@ import cookieRoutes from './cookies';
 import corsRoutes from './cors';
 import authRoutes from './auth';
 import adminRoutes from './admin';
+import tierRoutes from './tier';
 
 const router = Router();
 
@@ -13,6 +14,7 @@ router.use('/users', userRoutes);
 router.use('/admin', adminRoutes);
 router.use('/cookies', cookieRoutes);
 router.use('/cors', corsRoutes);
+router.use('/tier', tierRoutes);
 
 /**
  * @swagger
@@ -78,6 +80,11 @@ router.get('/', (req, res) => {
       admin: '/admin',
       cookies: '/cookies',
       cors: '/cors',
+      tier_management: '/tier/user/tier-status',
+      feature_availability: '/tier/user/feature-availability',
+      usage_stats: '/tier/user/usage-stats',
+      internal_tier_validation: '/tier/internal/validate-tier',
+      internal_bulk_validation: '/tier/internal/validate-tier-bulk',
       health: '/health',
     },
     documentation: '/api-docs',
