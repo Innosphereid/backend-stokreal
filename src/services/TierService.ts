@@ -4,6 +4,7 @@ import { TierFeatureModel } from '../models/TierFeatureModel';
 import { TierHistoryModel, TierHistoryRecord } from '../models/TierHistoryModel';
 import { TierFeatureDefinitionsModel } from '../models/TierFeatureDefinitionsModel';
 import { logger } from '../utils/logger';
+import { TierNotificationService } from './TierNotificationService';
 
 // Tier feature and usage interfaces
 export interface TierFeatureValue {
@@ -43,12 +44,14 @@ export class TierService {
   private readonly tierFeatureModel: TierFeatureModel;
   private readonly tierHistoryModel: TierHistoryModel;
   private readonly tierFeatureDefinitionsModel: TierFeatureDefinitionsModel;
+  private readonly notificationService: TierNotificationService;
 
   constructor() {
     this.userModel = new UserModel();
     this.tierFeatureModel = new TierFeatureModel();
     this.tierHistoryModel = new TierHistoryModel();
     this.tierFeatureDefinitionsModel = new TierFeatureDefinitionsModel();
+    this.notificationService = new TierNotificationService();
   }
 
   /**
@@ -157,9 +160,106 @@ export class TierService {
       });
 
       logger.info(`User ${userId} automatically downgraded from premium to free due to expiration`);
+      try {
+        const user = await this.userModel.findById(userId);
+        if (user) {
+          await this.notificationService.sendTierChangeNotification(
+            user,
+            'premium',
+            'free',
+            'expiration'
+          );
+        }
+      } catch (notifyError) {
+        logger.warn('Failed to send automatic downgrade notification:', notifyError);
+      }
       return true;
     } catch (error) {
       logger.error(`Failed to downgrade user ${userId}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Manually upgrade a user to premium (optionally set expiration)
+   */
+  async upgradeUserToPremium(
+    userId: string,
+    options?: { expiresAt?: Date; changedBy?: string; notes?: string }
+  ): Promise<boolean> {
+    const user = await this.userModel.findById(userId);
+    if (!user) return false;
+
+    const expiresAt = options?.expiresAt ?? user.subscription_expires_at ?? null;
+    try {
+      await this.userModel.update(userId, {
+        subscription_plan: 'premium',
+        subscription_expires_at: expiresAt ?? undefined,
+      });
+
+      await this.recordTierChange({
+        user_id: userId,
+        previous_plan: user.subscription_plan,
+        new_plan: 'premium',
+        change_reason: 'upgrade',
+        changed_by: options?.changedBy || '',
+        notes: options?.notes || '',
+      });
+
+      const fresh = await this.userModel.findById(userId);
+      if (fresh) {
+        await this.notificationService.sendTierChangeNotification(
+          fresh,
+          user.subscription_plan,
+          'premium',
+          'upgrade'
+        );
+      }
+      return true;
+    } catch (error) {
+      logger.error('Failed to upgrade user to premium:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Manually downgrade a user to free
+   */
+  async downgradeUserToFree(
+    userId: string,
+    options?: { changedBy?: string; notes?: string }
+  ): Promise<boolean> {
+    const user = await this.userModel.findById(userId);
+    if (!user) return false;
+    if (user.subscription_plan === 'free') return true; // idempotent
+
+    try {
+      await this.userModel.update(userId, {
+        subscription_plan: 'free',
+        subscription_expires_at: undefined,
+      });
+
+      await this.recordTierChange({
+        user_id: userId,
+        previous_plan: user.subscription_plan,
+        new_plan: 'free',
+        change_reason: 'downgrade',
+        changed_by: options?.changedBy || '',
+        notes: options?.notes || '',
+      });
+
+      const fresh = await this.userModel.findById(userId);
+      if (fresh) {
+        await this.notificationService.sendTierChangeNotification(
+          fresh,
+          user.subscription_plan,
+          'free',
+          'downgrade'
+        );
+      }
+      return true;
+    } catch (error) {
+      logger.error('Failed to downgrade user to free:', error);
       return false;
     }
   }
