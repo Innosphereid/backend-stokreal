@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { TierService } from '@/services/TierService';
 import { TierFeatureService } from '@/services/TierFeatureService';
+import { AuditLogService } from '@/services/AuditLogService';
 import { createSuccessResponse } from '@/utils/response';
 import { asyncHandler } from '@/middleware/errorHandler';
 import { logger } from '@/utils/logger';
@@ -26,10 +27,12 @@ import {
 export class TierController {
   private readonly tierService: TierService;
   private readonly tierFeatureService: TierFeatureService;
+  private readonly auditLogService: AuditLogService;
 
   constructor() {
     this.tierService = new TierService();
     this.tierFeatureService = new TierFeatureService();
+    this.auditLogService = new AuditLogService();
   }
 
   /**
@@ -37,12 +40,24 @@ export class TierController {
    * GET /api/v1/users/tier-status
    */
   getTierStatus = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const ipAddress = req.ip || req.socket.remoteAddress || 'unknown';
+    const userAgent = req.get('User-Agent') || 'unknown';
+
     logger.info('Tier status request received');
 
     const authenticatedReq = req as AuthenticatedRequest;
     const user = authenticatedReq.user as JWTUser;
 
     if (!user?.id) {
+      // Log failed authentication
+      await this.auditLogService.log({
+        action: 'tier_status_access_denied',
+        resource: 'tier',
+        details: { reason: 'User not authenticated' },
+        ipAddress,
+        userAgent,
+        success: false,
+      });
       throw createError('User not authenticated', 401);
     }
 
@@ -68,9 +83,36 @@ export class TierController {
         formattedResponse
       );
 
+      // Log successful tier status retrieval
+      await this.auditLogService.log({
+        userId: user.id,
+        action: 'tier_status_retrieved',
+        resource: 'tier',
+        details: {
+          current_tier: tierStatus.subscription_plan,
+          is_active: tierStatus.is_active,
+          days_until_expiration: tierStatus.days_until_expiration,
+          grace_period_active: tierStatus.grace_period_active,
+        },
+        ipAddress,
+        userAgent,
+        success: true,
+      });
+
       logger.info(`Tier status retrieved for user ${user.id}`);
       res.status(200).json(successResponse);
     } catch (error) {
+      // Log failed tier status retrieval
+      await this.auditLogService.log({
+        userId: user.id,
+        action: 'tier_status_retrieval_failed',
+        resource: 'tier',
+        details: { error: error instanceof Error ? error.message : 'Unknown error' },
+        ipAddress,
+        userAgent,
+        success: false,
+      });
+
       logger.error(`Failed to get tier status for user ${user.id}:`, error);
       throw createError('Failed to retrieve tier status', 500);
     }
@@ -81,6 +123,9 @@ export class TierController {
    * GET /api/v1/users/feature-availability
    */
   getFeatureAvailability = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const ipAddress = req.ip || req.socket.remoteAddress || 'unknown';
+    const userAgent = req.get('User-Agent') || 'unknown';
+
     logger.info('Feature availability request received');
 
     const authenticatedReq = req as AuthenticatedRequest;
@@ -88,6 +133,15 @@ export class TierController {
     const query = req.query as FeatureAvailabilityQuery;
 
     if (!user?.id) {
+      // Log failed authentication
+      await this.auditLogService.log({
+        action: 'feature_availability_access_denied',
+        resource: 'tier',
+        details: { reason: 'User not authenticated', feature: query.feature },
+        ipAddress,
+        userAgent,
+        success: false,
+      });
       throw createError('User not authenticated', 401);
     }
 
@@ -147,9 +201,38 @@ export class TierController {
         responseData
       );
 
+      // Log successful feature availability check
+      await this.auditLogService.log({
+        userId: user.id,
+        action: 'feature_availability_checked',
+        resource: 'tier',
+        details: {
+          requested_feature: query.feature || 'all',
+          features_checked: featuresToCheck,
+          total_features: Object.keys(features).length,
+        },
+        ipAddress,
+        userAgent,
+        success: true,
+      });
+
       logger.info(`Feature availability retrieved for user ${user.id}`);
       res.status(200).json(successResponse);
     } catch (error) {
+      // Log failed feature availability check
+      await this.auditLogService.log({
+        userId: user.id,
+        action: 'feature_availability_check_failed',
+        resource: 'tier',
+        details: {
+          requested_feature: query.feature || 'all',
+          error: error instanceof Error ? error.message : 'Unknown error',
+        },
+        ipAddress,
+        userAgent,
+        success: false,
+      });
+
       logger.error(`Failed to get feature availability for user ${user.id}:`, error);
       throw createError('Failed to retrieve feature availability', 500);
     }
@@ -160,6 +243,9 @@ export class TierController {
    * GET /api/v1/users/usage-stats
    */
   getUsageStatistics = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const ipAddress = req.ip || req.socket.remoteAddress || 'unknown';
+    const userAgent = req.get('User-Agent') || 'unknown';
+
     logger.info('Usage statistics request received');
 
     const authenticatedReq = req as AuthenticatedRequest;
@@ -167,6 +253,15 @@ export class TierController {
     const query = req.query as UsageStatisticsQuery;
 
     if (!user?.id) {
+      // Log failed authentication
+      await this.auditLogService.log({
+        action: 'usage_stats_access_denied',
+        resource: 'tier',
+        details: { reason: 'User not authenticated', period: query.period },
+        ipAddress,
+        userAgent,
+        success: false,
+      });
       throw createError('User not authenticated', 401);
     }
 
@@ -202,9 +297,38 @@ export class TierController {
         responseData
       );
 
+      // Log successful usage statistics retrieval
+      await this.auditLogService.log({
+        userId: user.id,
+        action: 'usage_stats_retrieved',
+        resource: 'tier',
+        details: {
+          period,
+          date_range: dateRange,
+          usage_metrics: Object.keys(usage),
+        },
+        ipAddress,
+        userAgent,
+        success: true,
+      });
+
       logger.info(`Usage statistics retrieved for user ${user.id}`);
       res.status(200).json(successResponse);
     } catch (error) {
+      // Log failed usage statistics retrieval
+      await this.auditLogService.log({
+        userId: user.id,
+        action: 'usage_stats_retrieval_failed',
+        resource: 'tier',
+        details: {
+          period,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        },
+        ipAddress,
+        userAgent,
+        success: false,
+      });
+
       logger.error(`Failed to get usage statistics for user ${user.id}:`, error);
       throw createError('Failed to retrieve usage statistics', 500);
     }

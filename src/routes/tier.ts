@@ -4,6 +4,13 @@ import { InternalTierController } from '@/controllers/InternalTierController';
 import { authenticateToken } from '@/middleware/jwtMiddleware';
 import { inputSanitizer } from '@/middleware/inputSanitizer';
 import { RateLimiter } from '@/middleware/rateLimiter';
+import {
+  auditTierStatus,
+  auditFeatureAvailability,
+  auditUsageStats,
+  auditInternalTierValidation,
+  auditInternalTierBulkValidation,
+} from '@/middleware/tierAuditMiddleware';
 
 const router = Router();
 const tierController = new TierController();
@@ -136,6 +143,7 @@ const bulkRateLimiter = new RateLimiter({
  */
 router.get(
   '/user/tier-status',
+  auditTierStatus,
   tierStatusRateLimiter.middleware,
   authenticateToken(),
   tierController.getTierStatus
@@ -212,6 +220,7 @@ router.get(
  */
 router.get(
   '/user/feature-availability',
+  auditFeatureAvailability,
   featureAvailabilityRateLimiter.middleware,
   authenticateToken(),
   tierController.getFeatureAvailability
@@ -294,6 +303,7 @@ router.get(
  */
 router.get(
   '/user/usage-stats',
+  auditUsageStats,
   usageStatsRateLimiter.middleware,
   authenticateToken(),
   tierController.getUsageStatistics
@@ -447,6 +457,7 @@ router.get(
  */
 router.post(
   '/internal/validate-tier',
+  auditInternalTierValidation,
   internalRateLimiter.middleware,
   inputSanitizer,
   // Note: Internal authentication middleware should be added here
@@ -581,6 +592,7 @@ router.post(
  */
 router.post(
   '/internal/validate-tier-bulk',
+  auditInternalTierBulkValidation,
   bulkRateLimiter.middleware,
   // Note: Internal authentication middleware should be added here
   // internalAuthMiddleware,

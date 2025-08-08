@@ -32,12 +32,27 @@ export class InternalTierController {
    * POST /api/v1/internal/validate-tier
    */
   validateTier = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const ipAddress = req.ip || req.socket.remoteAddress || 'unknown';
+    const userAgent = req.get('User-Agent') || 'unknown';
+
     logger.info('Internal tier validation request received', {
       endpoint: 'validate-tier',
       body: req.body,
     });
 
     const validationRequest = req.body as InternalTierValidationRequest;
+
+    // Log request received
+    await this.auditLogService.log({
+      userId: validationRequest.user_id,
+      action: 'tier_validation_requested',
+      resource: 'internal_tier_validation',
+      details: {
+        request: validationRequest,
+      },
+      ipAddress,
+      userAgent,
+    });
 
     // Validate required fields
     if (
@@ -122,7 +137,15 @@ export class InternalTierController {
             action: validationRequest.action,
             current_tier: tierStatus.subscription_plan,
             required_tier: validationRequest.required_tier,
+            request: validationRequest,
+            response: {
+              access_granted: true,
+              feature_available: featureValidation.feature_available,
+              usage_within_limits: featureValidation.usage_within_limits,
+            },
           },
+          ipAddress,
+          userAgent,
         });
 
         const responseData: InternalTierValidationResponse = {
@@ -158,7 +181,10 @@ export class InternalTierController {
             required_tier: validationRequest.required_tier,
             current_usage: featureValidation.current_usage,
             limit: featureValidation.limit,
+            request: validationRequest,
           },
+          ipAddress,
+          userAgent,
         });
 
         // Determine error message and upgrade message
@@ -206,7 +232,11 @@ export class InternalTierController {
           feature: validationRequest.feature,
           action: validationRequest.action,
           error: error instanceof Error ? error.message : 'Unknown error',
+          request: validationRequest,
         },
+        ipAddress,
+        userAgent,
+        success: false,
       });
 
       throw createError('Internal server error during tier validation', 500);
@@ -218,6 +248,9 @@ export class InternalTierController {
    * POST /api/v1/internal/validate-tier-bulk
    */
   validateTierBulk = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const ipAddress = req.ip || req.socket.remoteAddress || 'unknown';
+    const userAgent = req.get('User-Agent') || 'unknown';
+
     logger.info('Bulk tier validation request received', {
       endpoint: 'validate-tier-bulk',
       requestCount: req.body.requests?.length || 0,
@@ -225,6 +258,24 @@ export class InternalTierController {
     });
 
     const requests = req.body.requests as InternalTierValidationRequest[];
+
+    // Log bulk request received
+    await this.auditLogService.log({
+      action: 'bulk_tier_validation_requested',
+      resource: 'internal_tier_validation',
+      details: {
+        total_requests: requests?.length || 0,
+        requests:
+          requests?.map(r => ({
+            user_id: r.user_id,
+            feature: r.feature,
+            required_tier: r.required_tier,
+            action: r.action,
+          })) || [],
+      },
+      ipAddress,
+      userAgent,
+    });
 
     if (!Array.isArray(requests) || requests.length === 0) {
       res
@@ -330,6 +381,21 @@ export class InternalTierController {
         total: results.length,
       });
 
+      // Log bulk validation completed
+      await this.auditLogService.log({
+        action: 'bulk_tier_validation_completed',
+        resource: 'internal_tier_validation',
+        details: {
+          total_requests: results.length,
+          successful_validations: results.filter(r => !('error' in r.validation)).length,
+          failed_validations: results.filter(r => 'error' in r.validation).length,
+          response: successResponse,
+        },
+        ipAddress,
+        userAgent,
+        success: true,
+      });
+
       logger.info(`Bulk tier validation completed for ${results.length} requests`, {
         endpoint: 'validate-tier-bulk',
         totalRequests: results.length,
@@ -337,6 +403,19 @@ export class InternalTierController {
       });
       res.status(200).json(successResponse);
     } catch (error) {
+      // Log bulk validation error
+      await this.auditLogService.log({
+        action: 'bulk_tier_validation_error',
+        resource: 'internal_tier_validation',
+        details: {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          total_requests: requests?.length || 0,
+        },
+        ipAddress,
+        userAgent,
+        success: false,
+      });
+
       logger.error('Bulk tier validation failed:', error);
       throw createError('Bulk tier validation failed', 500);
     }
