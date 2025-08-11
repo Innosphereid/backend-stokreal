@@ -3,6 +3,7 @@ import './welcomeEmail';
 import './passwordResetEmail';
 import './passwordResetConfirmationEmail';
 import './verificationEmail';
+import './tierEmails';
 
 // Re-export the mailer with all extensions
 export { mailer } from '@/config/mailer';
