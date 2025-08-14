@@ -10,6 +10,9 @@
 - `src/services/ProductService.test.ts` - Unit tests for ProductService.
 - `src/services/CategoryService.ts` - Business logic for category operations and tier limits.
 - `src/services/CategoryService.test.ts` - Unit tests for CategoryService.
+- `src/services/TierValidationService.ts` - Unified tier validation service for products and categories.
+- `src/middleware/productTierValidationMiddleware.ts` - Middleware for product and category tier validation.
+- `src/services/AuditLogService.ts` - Centralized audit logging service for all system operations.
 - `src/models/ProductModel.ts` - Data access layer for products table with search capabilities.
 - `src/models/ProductModel.test.ts` - Unit tests for ProductModel.
 - `src/models/CategoryModel.ts` - Data access layer for categories table.
@@ -62,11 +65,11 @@
   - [x] 2.3 Add proper database indexing for search performance
   - [x] 2.4 Implement soft delete pattern for products
 
-- [ ] 3.0 Business Logic Services
-  - [ ] 3.1 Implement ProductService with tier validation
-  - [ ] 3.2 Implement CategoryService with tier limits
-  - [ ] 3.3 Integrate with existing tier validation system
-  - [ ] 3.4 Add audit logging for all CRUD operations
+- [x] 3.0 Business Logic Services
+  - [x] 3.1 Implement ProductService with tier validation
+  - [x] 3.2 Implement CategoryService with tier limits
+  - [x] 3.3 Integrate with existing tier validation system
+  - [x] 3.4 Add audit logging for all CRUD operations
 
 - [ ] 4.0 API Controllers and Routes
   - [ ] 4.1 Implement ProductController with full CRUD endpoints
