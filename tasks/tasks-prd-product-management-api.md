@@ -56,11 +56,11 @@
   - [x] 1.3 Create seed data for default categories
   - [x] 1.4 Verify existing products table structure and indexes
 
-- [ ] 2.0 Core Models and Data Access Layer
-  - [ ] 2.1 Implement ProductModel with CRUD operations and search
-  - [ ] 2.2 Implement CategoryModel with CRUD operations
-  - [ ] 2.3 Add proper database indexing for search performance
-  - [ ] 2.4 Implement soft delete pattern for products
+- [x] 2.0 Core Models and Data Access Layer
+  - [x] 2.1 Implement ProductModel with CRUD operations and search
+  - [x] 2.2 Implement CategoryModel with CRUD operations
+  - [x] 2.3 Add proper database indexing for search performance
+  - [x] 2.4 Implement soft delete pattern for products
 
 - [ ] 3.0 Business Logic Services
   - [ ] 3.1 Implement ProductService with tier validation
