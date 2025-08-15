@@ -6,12 +6,15 @@ import { CreateUserRequest, UpdateUserRequest, QueryParams } from '@/types';
 import { AuthenticatedRequest } from '@/types/jwt';
 import { ProfileValidator } from '@/validators/profileValidator';
 import { logger } from '@/utils/logger';
+import { TierFeatureService } from '@/services/TierFeatureService';
 
 export class UserController {
   private readonly userService: UserService;
+  private readonly tierFeatureService: TierFeatureService;
 
   constructor() {
     this.userService = new UserService();
+    this.tierFeatureService = new TierFeatureService();
   }
 
   // Get current user profile (authenticated user)
@@ -234,4 +237,22 @@ export class UserController {
     const response = createSuccessResponse('User deleted successfully');
     res.status(200).json(response);
   });
+
+  // Get product usage and limit for the authenticated user
+  getProductUsage = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user) {
+        const errorResponse = createErrorResponse('Authentication required');
+        res.status(401).json(errorResponse);
+        return;
+      }
+      const usage = await this.tierFeatureService.getUserFeatureUsage(req.user.id);
+      const productSlot = usage['product_slot'] || { current: 0, limit: null };
+      const response = createSuccessResponse('Product usage retrieved successfully', {
+        current_usage: productSlot.current,
+        usage_limit: productSlot.limit,
+      });
+      res.status(200).json(response);
+    }
+  );
 }

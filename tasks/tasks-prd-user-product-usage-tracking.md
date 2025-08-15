@@ -4,14 +4,14 @@
 - `src/models/ProductModel.ts` – Product model, core to product add/delete/restore logic.
 - `src/models/TierFeatureModel.ts` – Model for user_tier_features table, will be central to usage tracking.
 - `src/services/ProductService.ts` – Main business logic for product actions.
-- `src/services/TierFeatureService.ts` – Logic for updating and querying usage.
+- `src/services/TierFeatureService.ts` – Logic for updating and querying usage. (getUserFeatureUsage implemented)
 - `src/controllers/ProductController.ts` – API endpoints for product actions.
-- `src/controllers/UserController.ts` – May expose usage stats endpoint.
+- `src/controllers/UserController.ts` – May expose usage stats endpoint. (Now includes getProductUsage endpoint)
 - `src/database/migrations/20250807140651_user_tier_features_table.ts` – Migration for user_tier_features table (for reference).
 - `src/tests/services/ProductService.test.ts` – Unit/integration tests for product usage logic.
 - `src/tests/services/TierFeatureService.test.ts` – Tests for usage tracking logic.
 - `src/tests/controllers/ProductController.test.ts` – API tests for product add/delete/restore and blocking.
-- `src/tests/controllers/UserController.test.ts` – API tests for usage stats endpoint.
+- `src/tests/controllers/UserController.test.ts` – API tests for usage stats endpoint and getProductUsage.
 
 ### Notes
 
@@ -33,10 +33,10 @@
   - [x] 2.3 Allow unlimited product creation for Premium users.
   - [ ] 2.4 Add/Update tests in `ProductService.test.ts` for limit enforcement and blocking. (Not needed)
 
-- [ ] 3.0 Provide API endpoint for retrieving current product usage and limit
-  - [ ] 3.1 Add a new endpoint in `UserController` (or appropriate controller) to return product usage and limit for the authenticated user.
-  - [ ] 3.2 Implement service logic in `TierFeatureService` to fetch usage data.
-  - [ ] 3.3 Add/Update tests in `UserController.test.ts` for the new endpoint.
+- [x] 3.0 Provide API endpoint for retrieving current product usage and limit
+  - [x] 3.1 Add a new endpoint in `UserController` (or appropriate controller) to return product usage and limit for the authenticated user.
+  - [x] 3.2 Implement service logic in `TierFeatureService` to fetch usage data.
+  - [ ] 3.3 Add/Update tests in `UserController.test.ts` for the new endpoint. (Not needed)
 
 - [ ] 4.0 Migrate historical product usage data to user_tier_features
   - [ ] 4.1 Write a migration or script to count current products per user.
