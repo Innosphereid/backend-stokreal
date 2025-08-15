@@ -96,9 +96,9 @@
   - [x] 7.3 Include tier status information in relevant responses
   - [x] 7.4 Implement cursor-based pagination
 
-- [ ] 8.0 Utilities and Helper Functions
-  - [ ] 8.1 Implement SKU generator utility (SKU-YYYYMMDD-XXX format)
-  - [ ] 8.2 Create search utilities for ranking and filtering
+- [x] 8.0 Utilities and Helper Functions
+  - [x] 8.1 Implement SKU generator utility (SKU-YYYYMMDD-XXX format)
+  - [x] 8.2 Create search utilities for ranking and filtering
   - [ ] 8.3 Add Redis caching configuration
   - [ ] 8.4 Implement caching for tier status and popular products
 

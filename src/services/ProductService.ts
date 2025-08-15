@@ -11,6 +11,7 @@ import { AuditLogService } from './AuditLogService';
 import { logger } from '../utils/logger';
 import { createError } from '../middleware/errorHandler';
 import { SubscriptionPlan } from '../types';
+import { generateSKU } from '@/utils/skuGenerator';
 
 export interface ProductServiceResponse<T> {
   success: boolean;
@@ -649,23 +650,19 @@ export class ProductService {
    */
   private async generateUniqueSKU(userId: string): Promise<string> {
     const date = new Date();
-    const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
     let counter = 1;
     let sku: string;
-
     do {
-      sku = `SKU-${dateStr}-${counter.toString().padStart(3, '0')}`;
+      sku = generateSKU(counter, date);
       const existingProduct = await this.productModel.findBySku(userId, sku);
       if (!existingProduct) {
         break;
       }
       counter++;
     } while (counter <= 999);
-
     if (counter > 999) {
       throw new Error('Unable to generate unique SKU');
     }
-
     return sku;
   }
 
