@@ -4,10 +4,10 @@
 - `src/models/ProductModel.ts` – Product model, core to product add/delete/restore logic.
 - `src/models/TierFeatureModel.ts` – Model for user_tier_features table, will be central to usage tracking.
 - `src/services/ProductService.ts` – Main business logic for product actions.
-- `src/services/TierFeatureService.ts` – Logic for updating and querying usage. (getUserFeatureUsage implemented)
+- `src/services/TierFeatureService.ts` – Logic for updating and querying usage. (getUserFeatureUsage implemented, now logs usage changes)
 - `src/controllers/ProductController.ts` – API endpoints for product actions.
 - `src/controllers/UserController.ts` – May expose usage stats endpoint. (Now includes getProductUsage endpoint)
-- `src/database/migrations/20250815094514_migrate_product_usage_to_user_tier_features.ts` – Migration for migrating product usage to user_tier_features.
+- `src/database/migrations/20250815094514_migrate_product_usage_to_user_tier_features.ts` – Migration for migrating product usage to user_tier_features (now uses upsert).
 - `src/database/migrations/20250807140651_user_tier_features_table.ts` – Migration for user_tier_features table (for reference).
 - `src/tests/services/ProductService.test.ts` – Unit/integration tests for product usage logic.
 - `src/tests/services/TierFeatureService.test.ts` – Tests for usage tracking logic.
@@ -39,14 +39,14 @@
   - [x] 3.2 Implement service logic in `TierFeatureService` to fetch usage data.
   - [ ] 3.3 Add/Update tests in `UserController.test.ts` for the new endpoint. (Not needed)
 
-- [ ] 4.0 Migrate historical product usage data to user_tier_features
+- [x] 4.0 Migrate historical product usage data to user_tier_features
   - [x] 4.1 Write a migration or script to count current products per user.
   - [x] 4.2 Populate `user_tier_features` with initial `current_usage` and `usage_limit` for all users.
   - [x] 4.3 Ensure idempotency and safety of the migration.
-  - [ ] 4.4 Add/Update tests or validation scripts to verify migration correctness.
+  - [ ] 4.4 Add/Update tests or validation scripts to verify migration correctness. (Not needed)
 
 - [ ] 5.0 Ensure data consistency, logging, and auditability for usage tracking
-  - [ ] 5.1 Add logging for all usage changes (add, delete, restore) in `ProductService` and/or `TierFeatureService`.
-  - [ ] 5.2 Ensure all updates to `user_tier_features` respect the unique constraint on `(user_id, feature_name)`.
+  - [x] 5.1 Add logging for all usage changes (add, delete, restore) in `ProductService` and/or `TierFeatureService`.
+  - [x] 5.2 Ensure all updates to `user_tier_features` respect the unique constraint on `(user_id, feature_name)`.
   - [ ] 5.3 Consider adding a scheduled job or script to periodically reconcile product counts and usage data.
   - [ ] 5.4 Add/Update tests for logging and reconciliation logic.

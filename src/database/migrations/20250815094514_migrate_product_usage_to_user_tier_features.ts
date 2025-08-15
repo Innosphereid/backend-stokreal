@@ -18,29 +18,14 @@ export async function up(knex: Knex): Promise<void> {
       if (user.subscription_plan === 'free') usageLimit = 50;
       // Premium and others: unlimited (null)
 
-      // Upsert into user_tier_features for 'product_slot'
-      const existing = await trx('user_tier_features')
-        .where({ user_id: user.id, feature_name: 'product_slot' })
-        .first();
-      if (existing) {
-        await trx('user_tier_features')
-          .where({ user_id: user.id, feature_name: 'product_slot' })
-          .update({
-            current_usage: productCount,
-            usage_limit: usageLimit,
-            updated_at: trx.fn.now(),
-          });
-      } else {
-        await trx('user_tier_features').insert({
-          user_id: user.id,
-          feature_name: 'product_slot',
-          current_usage: productCount,
-          usage_limit: usageLimit,
-          created_at: trx.fn.now(),
-          updated_at: trx.fn.now(),
-          last_reset_at: trx.fn.now(),
-        });
-      }
+      // Upsert into user_tier_features for 'product_slot' (PostgreSQL ON CONFLICT)
+      await trx.raw(
+        `INSERT INTO user_tier_features (user_id, feature_name, current_usage, usage_limit, created_at, updated_at, last_reset_at)
+         VALUES (?, ?, ?, ?, now(), now(), now())
+         ON CONFLICT (user_id, feature_name)
+         DO UPDATE SET current_usage = EXCLUDED.current_usage, usage_limit = EXCLUDED.usage_limit, updated_at = now()`,
+        [user.id, 'product_slot', productCount, usageLimit]
+      );
     }
   });
 }

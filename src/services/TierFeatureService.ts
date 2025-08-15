@@ -76,16 +76,21 @@ export class TierFeatureService {
     trx?: any
   ): Promise<IncrementResult> {
     try {
+      let result: IncrementResult;
       if (atomic) {
-        return await this.tierFeatureModel.incrementUsageAtomic(
+        result = await this.tierFeatureModel.incrementUsageAtomic(
           userId,
           featureName,
           increment,
           trx
         );
       } else {
-        return await this.tierFeatureModel.incrementUsage(userId, featureName, increment, trx);
+        result = await this.tierFeatureModel.incrementUsage(userId, featureName, increment, trx);
       }
+      logger.info(
+        `Feature usage updated: user_id=${userId}, feature=${featureName}, increment=${increment}, new_current_usage=${result.current_usage}`
+      );
+      return result;
     } catch (error) {
       logger.error(
         `Failed to track feature usage for user ${userId}, feature ${featureName}:`,
