@@ -22,6 +22,7 @@ export interface ProductServiceResponse<T> {
     categories_used: number;
     categories_limit: number | 'unlimited';
   };
+  next_cursor?: string;
   message?: string;
 }
 
@@ -173,10 +174,14 @@ export class ProductService {
    */
   async getProducts(
     userId: string,
-    searchParams: ProductSearchParams
+    searchParams: ProductSearchParams & { after_id?: string }
   ): Promise<ProductServiceResponse<{ products: Product[]; total: number }>> {
     try {
-      const { data: products, total } = await this.productModel.findProductsByUser(searchParams);
+      const {
+        data: products,
+        total,
+        next_cursor,
+      } = await this.productModel.findProductsByUser(searchParams);
 
       // Log audit event for product list read
       await this.logAuditEvent(userId, 'products_listed', 'multiple', {
@@ -194,6 +199,7 @@ export class ProductService {
       return {
         success: true,
         data: { products, total },
+        ...(next_cursor ? { next_cursor } : {}),
         tier_info: {
           current_tier: tierStatus.subscription_plan,
           products_used: productsUsage,

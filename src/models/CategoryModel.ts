@@ -57,11 +57,12 @@ export class CategoryModel extends BaseModel<Category> {
   }
 
   /**
-   * Find categories by user ID with advanced filtering
+   * Find categories by user ID with advanced filtering and cursor-based pagination
+   * Supports both page/limit and after_id/limit (cursor) pagination
    */
   async findCategoriesByUser(
-    searchParams: CategorySearchParams
-  ): Promise<{ data: Category[]; total: number }> {
+    searchParams: CategorySearchParams & { after_id?: string }
+  ): Promise<{ data: Category[]; total: number; next_cursor?: string }> {
     const {
       user_id,
       search,
@@ -71,6 +72,7 @@ export class CategoryModel extends BaseModel<Category> {
       limit = 10,
       sort = 'sort_order',
       order = 'asc',
+      after_id,
     } = searchParams;
 
     // Build base query - exclude soft deleted records
@@ -86,11 +88,9 @@ export class CategoryModel extends BaseModel<Category> {
     // Apply parent filter
     if (parent_id !== undefined) {
       if (parent_id === null) {
-        // Root categories (no parent)
         dataQuery = dataQuery.whereNull('parent_id');
         countQuery = countQuery.whereNull('parent_id');
       } else {
-        // Subcategories of specific parent
         dataQuery = dataQuery.where({ parent_id });
         countQuery = countQuery.where({ parent_id });
       }
@@ -102,14 +102,24 @@ export class CategoryModel extends BaseModel<Category> {
       countQuery = countQuery.where({ is_active });
     }
 
-    // Get total count
+    // Cursor-based pagination
+    if (after_id) {
+      dataQuery = dataQuery.andWhere('id', '>', after_id);
+      dataQuery = dataQuery.orderBy('id', 'asc');
+      // Always fetch one extra to determine next_cursor
+      const rows = await dataQuery.limit(limit + 1);
+      const hasNext = rows.length > limit;
+      const data = hasNext ? rows.slice(0, limit) : rows;
+      const next_cursor = hasNext ? data[data.length - 1].id : undefined;
+      // For cursor, total is not meaningful, so return 0
+      return { data, total: 0, ...(next_cursor ? { next_cursor } : {}) };
+    }
+
+    // Page/limit pagination (default)
+    const offset = (page - 1) * limit;
     const [result] = await countQuery.count('* as count');
     const total = parseInt((result?.count as string) || '0', 10);
-
-    // Apply pagination and sorting
-    const offset = (page - 1) * limit;
     const data = await dataQuery.orderBy(sort, order).limit(limit).offset(offset);
-
     return { data, total };
   }
 

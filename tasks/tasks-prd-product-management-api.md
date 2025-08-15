@@ -90,11 +90,11 @@
   - [x] 6.3 Add SKU and barcode exact matching
   - [x] 6.4 Implement search result ranking by relevance and popularity
 
-- [ ] 7.0 Response Formatting and Resources
-  - [ ] 7.1 Create ProductResource for consistent API responses
-  - [ ] 7.2 Create CategoryResource for category responses
-  - [ ] 7.3 Include tier status information in relevant responses
-  - [ ] 7.4 Implement cursor-based pagination
+- [x] 7.0 Response Formatting and Resources
+  - [x] 7.1 Create ProductResource for consistent API responses
+  - [x] 7.2 Create CategoryResource for category responses
+  - [x] 7.3 Include tier status information in relevant responses
+  - [x] 7.4 Implement cursor-based pagination
 
 - [ ] 8.0 Utilities and Helper Functions
   - [ ] 8.1 Implement SKU generator utility (SKU-YYYYMMDD-XXX format)

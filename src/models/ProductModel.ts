@@ -100,11 +100,12 @@ export class ProductModel extends BaseModel<Product> {
   }
 
   /**
-   * Find products by user ID with advanced filtering
+   * Find products by user ID with advanced filtering and cursor-based pagination
+   * Supports both page/limit and after_id/limit (cursor) pagination
    */
   async findProductsByUser(
-    searchParams: ProductSearchParams
-  ): Promise<{ data: Product[]; total: number }> {
+    searchParams: ProductSearchParams & { after_id?: string }
+  ): Promise<{ data: Product[]; total: number; next_cursor?: string }> {
     const {
       user_id,
       search,
@@ -117,6 +118,7 @@ export class ProductModel extends BaseModel<Product> {
       limit = 10,
       sort = 'created_at',
       order = 'desc',
+      after_id,
     } = searchParams;
 
     // Build base query - exclude soft deleted records
@@ -157,14 +159,24 @@ export class ProductModel extends BaseModel<Product> {
       countQuery = countQuery.whereRaw('current_stock <= minimum_stock');
     }
 
-    // Get total count
+    // Cursor-based pagination
+    if (after_id) {
+      dataQuery = dataQuery.andWhere('id', '>', after_id);
+      dataQuery = dataQuery.orderBy('id', 'asc');
+      // Always fetch one extra to determine next_cursor
+      const rows = await dataQuery.limit(limit + 1);
+      const hasNext = rows.length > limit;
+      const data = hasNext ? rows.slice(0, limit) : rows;
+      const next_cursor = hasNext ? data[data.length - 1].id : undefined;
+      // For cursor, total is not meaningful, so return 0
+      return { data, total: 0, ...(next_cursor ? { next_cursor } : {}) };
+    }
+
+    // Page/limit pagination (default)
+    const offset = (page - 1) * limit;
     const [result] = await countQuery.count('* as count');
     const total = parseInt((result?.count as string) || '0', 10);
-
-    // Apply pagination and sorting
-    const offset = (page - 1) * limit;
     const data = await dataQuery.orderBy(sort, order).limit(limit).offset(offset);
-
     return { data, total };
   }
 

@@ -14,6 +14,7 @@ import {
 } from '@/models/ProductModel';
 import { AuthenticatedRequest } from '@/types/jwt';
 import { logger } from '@/utils/logger';
+import { ProductResource } from '@/resources/productResource';
 
 export class ProductController {
   private readonly productService: ProductService;
@@ -53,7 +54,7 @@ export class ProductController {
     });
 
     const response = createSuccessResponse('Product created successfully', {
-      product: result.product,
+      product: ProductResource.format(result.product),
       tier_warning: result.tier_warning,
       upgrade_prompt: result.upgrade_prompt,
     });
@@ -74,7 +75,7 @@ export class ProductController {
 
     const userId = req.user.id;
     // Only include optional fields if present
-    const queryParams: ProductSearchParams = {
+    const queryParams: ProductSearchParams & { after_id?: string } = {
       user_id: userId,
       ...(req.query.search ? { search: req.query.search as string } : {}),
       ...(req.query.category_id ? { category_id: req.query.category_id as string } : {}),
@@ -86,6 +87,7 @@ export class ProductController {
       ...(req.query.limit ? { limit: parseInt(req.query.limit as string) } : {}),
       ...(req.query.sort ? { sort: req.query.sort as string } : {}),
       ...(req.query.order ? { order: req.query.order as 'asc' | 'desc' } : {}),
+      ...(req.query.after_id ? { after_id: req.query.after_id as string } : {}),
     };
 
     logger.info(`Products list request received for user ${userId}`, {
@@ -93,22 +95,32 @@ export class ProductController {
       category_id: queryParams.category_id,
       page: queryParams.page,
       limit: queryParams.limit,
+      after_id: queryParams.after_id,
       user_id: userId,
     });
 
     const result = await this.productService.getProducts(userId, queryParams);
 
-    const paginationMeta = calculatePaginationMeta(
-      queryParams.page || 1,
-      queryParams.limit || 10,
-      result.data.total
-    );
+    let meta;
+    if (queryParams.after_id) {
+      // Cursor-based meta
+      meta = {
+        ...(result.next_cursor !== undefined ? { next_cursor: result.next_cursor } : {}),
+        limit: queryParams.limit || 10,
+      };
+    } else {
+      // Page/limit meta
+      meta = calculatePaginationMeta(
+        queryParams.page || 1,
+        queryParams.limit || 10,
+        result.data.total
+      );
+    }
 
-    // Add tier_info to response in a type-safe way
     const response = {
       ...createPaginatedResponse(
-        result.data.products,
-        paginationMeta,
+        ProductResource.formatList(result.data.products || result.data),
+        meta,
         result.message || 'Products retrieved successfully'
       ),
       ...(result.tier_info ? { tier_info: result.tier_info } : {}),
@@ -116,9 +128,10 @@ export class ProductController {
 
     logger.info(`Products list retrieved successfully for user ${userId}`, {
       total_products: result.data.total,
-      returned_count: result.data.products.length,
+      returned_count: (result.data.products || result.data).length,
       page: queryParams.page,
       limit: queryParams.limit,
+      after_id: queryParams.after_id,
       user_id: userId,
     });
 
@@ -166,7 +179,8 @@ export class ProductController {
       user_id: userId,
     });
 
-    res.status(200).json(result);
+    const formatted = { ...result, data: ProductResource.format(result.data) };
+    res.status(200).json(formatted);
   });
 
   /**
@@ -212,7 +226,8 @@ export class ProductController {
       user_id: userId,
     });
 
-    res.status(200).json(result);
+    const formatted = { ...result, data: ProductResource.format(result.data) };
+    res.status(200).json(formatted);
   });
 
   /**
@@ -300,7 +315,8 @@ export class ProductController {
       user_id: userId,
     });
 
-    res.status(200).json(result);
+    const formatted = { ...result, data: ProductResource.formatList(result.data) };
+    res.status(200).json(formatted);
   });
 
   /**
@@ -429,7 +445,7 @@ export class ProductController {
       // Add tier_info to response in a type-safe way
       const response = {
         ...createPaginatedResponse(
-          result.data.products,
+          ProductResource.formatList(result.data.products),
           paginationMeta,
           `Products in category retrieved successfully`
         ),

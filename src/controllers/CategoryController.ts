@@ -14,6 +14,7 @@ import {
 } from '@/models/CategoryModel';
 import { AuthenticatedRequest } from '@/types/jwt';
 import { logger } from '@/utils/logger';
+import { CategoryResource } from '@/resources/categoryResource';
 
 export class CategoryController {
   private readonly categoryService: CategoryService;
@@ -48,7 +49,7 @@ export class CategoryController {
       user_id: userId,
     });
     const response = createSuccessResponse('Category created successfully', {
-      category: result.category,
+      category: CategoryResource.format(result.category),
       tier_warning: result.tier_warning,
       upgrade_prompt: result.upgrade_prompt,
     });
@@ -66,7 +67,7 @@ export class CategoryController {
       return;
     }
     const userId = req.user.id;
-    const queryParams: CategorySearchParams = {
+    const queryParams: CategorySearchParams & { after_id?: string } = {
       user_id: userId,
       ...(req.query.search ? { search: req.query.search as string } : {}),
       ...(req.query.parent_id ? { parent_id: req.query.parent_id as string } : {}),
@@ -75,33 +76,46 @@ export class CategoryController {
       ...(req.query.limit ? { limit: parseInt(req.query.limit as string) } : {}),
       ...(req.query.sort ? { sort: req.query.sort as string } : {}),
       ...(req.query.order ? { order: req.query.order as 'asc' | 'desc' } : {}),
+      ...(req.query.after_id ? { after_id: req.query.after_id as string } : {}),
     };
     logger.info(`Categories list request received for user ${userId}`, {
       search: queryParams.search,
       parent_id: queryParams.parent_id,
       page: queryParams.page,
       limit: queryParams.limit,
+      after_id: queryParams.after_id,
       user_id: userId,
     });
     const result = await this.categoryService.getCategories(userId, queryParams);
-    const paginationMeta = calculatePaginationMeta(
-      queryParams.page || 1,
-      queryParams.limit || 10,
-      result.data.total
-    );
+    let meta;
+    if (queryParams.after_id) {
+      // Cursor-based meta
+      meta = {
+        ...(result.next_cursor ? { next_cursor: result.next_cursor } : {}),
+        limit: queryParams.limit || 10,
+      };
+    } else {
+      // Page/limit meta
+      meta = calculatePaginationMeta(
+        queryParams.page || 1,
+        queryParams.limit || 10,
+        result.data.total
+      );
+    }
     const response = {
       ...createPaginatedResponse(
-        result.data.categories,
-        paginationMeta,
+        CategoryResource.formatList(result.data.categories || result.data),
+        meta,
         result.message || 'Categories retrieved successfully'
       ),
       ...(result.tier_info ? { tier_info: result.tier_info } : {}),
     };
     logger.info(`Categories list retrieved successfully for user ${userId}`, {
       total_categories: result.data.total,
-      returned_count: result.data.categories.length,
+      returned_count: (result.data.categories || result.data).length,
       page: queryParams.page,
       limit: queryParams.limit,
+      after_id: queryParams.after_id,
       user_id: userId,
     });
     res.status(200).json(response);
@@ -143,7 +157,8 @@ export class CategoryController {
         category_name: result.data.name,
         user_id: userId,
       });
-      res.status(200).json(result);
+      const formatted = { ...result, data: CategoryResource.format(result.data) };
+      res.status(200).json(formatted);
     }
   );
 
@@ -183,7 +198,8 @@ export class CategoryController {
       category_name: result.data.name,
       user_id: userId,
     });
-    res.status(200).json(result);
+    const formatted = { ...result, data: CategoryResource.format(result.data) };
+    res.status(200).json(formatted);
   });
 
   /**
@@ -340,7 +356,7 @@ export class CategoryController {
       );
       const response = {
         ...createPaginatedResponse(
-          result.data.categories,
+          CategoryResource.formatList(result.data.categories),
           paginationMeta,
           `Categories by parent retrieved successfully`
         ),
@@ -396,7 +412,14 @@ export class CategoryController {
         results_count: categories.length,
         user_id: userId,
       });
-      res.status(200).json(createSuccessResponse('Categories search results', categories));
+      res
+        .status(200)
+        .json(
+          createSuccessResponse(
+            'Categories search results',
+            CategoryResource.formatList(categories)
+          )
+        );
     }
   );
 }

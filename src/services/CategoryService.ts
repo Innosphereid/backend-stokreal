@@ -21,6 +21,7 @@ export interface CategoryServiceResponse<T> {
     categories_used: number;
     categories_limit: number | 'unlimited';
   };
+  next_cursor?: string;
   message?: string;
 }
 
@@ -172,11 +173,14 @@ export class CategoryService {
    */
   async getCategories(
     userId: string,
-    searchParams: CategorySearchParams
+    searchParams: CategorySearchParams & { after_id?: string }
   ): Promise<CategoryServiceResponse<{ categories: Category[]; total: number }>> {
     try {
-      const { data: categories, total } =
-        await this.categoryModel.findCategoriesByUser(searchParams);
+      const {
+        data: categories,
+        total,
+        next_cursor,
+      } = await this.categoryModel.findCategoriesByUser(searchParams);
 
       // Log audit event for categories list read
       await this.logAuditEvent(userId, 'categories_listed', 'multiple', {
@@ -194,6 +198,7 @@ export class CategoryService {
       return {
         success: true,
         data: { categories, total },
+        ...(next_cursor ? { next_cursor } : {}),
         tier_info: {
           current_tier: tierStatus.subscription_plan,
           products_used: 0, // Will be populated if needed
