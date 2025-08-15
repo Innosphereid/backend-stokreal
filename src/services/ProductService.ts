@@ -86,11 +86,11 @@ export class ProductService {
   ): Promise<ProductCreationResult> {
     return await db.transaction(async trx => {
       try {
-        // Validate tier limits before creation
-        const tierValidation = await this.validateProductCreation(userId);
-        if (!tierValidation.canCreate) {
-          throw createError(tierValidation.reason || 'Product creation limit reached', 403);
-        }
+        // Get tier info before creation
+        const tierStatus = await this.tierValidationService.getUserTierStatus(userId);
+        const isPremium = tierStatus.subscription_plan === 'premium';
+        const maxProducts = tierStatus.tier_features.products?.limit;
+
         // Generate SKU if not provided
         if (!productData.sku) {
           productData.sku = await this.generateUniqueSKU(userId);
@@ -114,8 +114,29 @@ export class ProductService {
           },
           trx
         );
-        // Update product usage tracking in user_tier_features (atomic)
-        await this.tierFeatureService.trackFeatureUsage(userId, 'product_slot', 1, true, trx);
+
+        // Atomically increment product_slot usage and check limit
+        const usageResult = await this.tierFeatureService.trackFeatureUsage(
+          userId,
+          'product_slot',
+          1,
+          true,
+          trx
+        );
+        const newUsage = usageResult.current_usage;
+        if (
+          !isPremium &&
+          maxProducts !== null &&
+          maxProducts !== undefined &&
+          newUsage > maxProducts
+        ) {
+          // Rollback: usage exceeded after increment
+          throw createError(
+            `Product limit reached. Maximum ${maxProducts} products allowed for Free tier.`,
+            403
+          );
+        }
+
         // Log audit event for product creation (outside transaction)
         setImmediate(() =>
           this.logAuditEvent(userId, 'product_created', product.id, {
@@ -126,13 +147,10 @@ export class ProductService {
               current_stock: product.current_stock,
               selling_price: product.selling_price,
             },
-            tier_warning: tierValidation.warning,
-            upgrade_prompt: tierValidation.upgradePrompt,
+            // Optionally add tier warning/upgradePrompt if needed
           })
         );
         const result: ProductCreationResult = { product };
-        if (tierValidation.warning) result.tier_warning = tierValidation.warning;
-        if (tierValidation.upgradePrompt) result.upgrade_prompt = tierValidation.upgradePrompt;
         return result;
       } catch (error) {
         // Log audit event for failed product creation (outside transaction)

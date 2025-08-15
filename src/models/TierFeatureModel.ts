@@ -73,6 +73,16 @@ export class TierFeatureModel {
         .first();
       if (!row) throw new Error('Feature usage record not found');
       const newUsage = row.current_usage + increment;
+      // Enforce usage_limit atomically
+      if (
+        row.usage_limit !== null &&
+        typeof row.usage_limit === 'number' &&
+        newUsage > row.usage_limit
+      ) {
+        throw new Error(
+          `Usage limit exceeded: attempted to set ${featureName} to ${newUsage} (limit: ${row.usage_limit})`
+        );
+      }
       await transaction('user_tier_features')
         .where({ user_id: userId, feature_name: featureName })
         .update({
