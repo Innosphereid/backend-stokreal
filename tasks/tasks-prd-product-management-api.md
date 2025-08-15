@@ -13,6 +13,7 @@
 - `src/services/TierValidationService.ts` - Unified tier validation service for products and categories.
 - `src/middleware/productTierValidationMiddleware.ts` - Middleware for product and category tier validation.
 - `src/services/AuditLogService.ts` - Centralized audit logging service for all system operations.
+- `src/controllers/ProductController.ts` - Main controller for product CRUD operations and search functionality.
 - `src/models/ProductModel.ts` - Data access layer for products table with search capabilities.
 - `src/models/ProductModel.test.ts` - Unit tests for ProductModel.
 - `src/models/CategoryModel.ts` - Data access layer for categories table.
@@ -71,11 +72,11 @@
   - [x] 3.3 Integrate with existing tier validation system
   - [x] 3.4 Add audit logging for all CRUD operations
 
-- [ ] 4.0 API Controllers and Routes
-  - [ ] 4.1 Implement ProductController with full CRUD endpoints
-  - [ ] 4.2 Implement CategoryController with management endpoints
-  - [ ] 4.3 Create product and category route files
-  - [ ] 4.4 Integrate routes into main router
+- [x] 4.0 API Controllers and Routes
+  - [x] 4.1 Implement ProductController with full CRUD endpoints
+  - [x] 4.2 Implement CategoryController with management endpoints
+  - [x] 4.3 Create product and category route files
+  - [x] 4.4 Integrate routes into main router
 
 - [ ] 5.0 Validation and Middleware
   - [ ] 5.1 Implement product input validation and sanitization
