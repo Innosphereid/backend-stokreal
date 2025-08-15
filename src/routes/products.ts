@@ -45,4 +45,7 @@ router.post('/:id/restore', authenticateToken(), productController.restoreProduc
 // Get products by category
 router.get('/category/:categoryId', authenticateToken(), productController.getProductsByCategory);
 
+// Product master suggestions
+router.get('/suggestions', authenticateToken(), productController.getProductMasterSuggestions);
+
 export default router;

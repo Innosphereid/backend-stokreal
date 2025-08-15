@@ -446,4 +446,29 @@ export class ProductController {
       res.status(200).json(response);
     }
   );
+
+  /**
+   * Get product suggestions from product_master
+   * GET /api/products/suggestions?q=searchTerm&limit=5
+   */
+  getProductMasterSuggestions = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user) {
+        const errorResponse = createErrorResponse('Authentication required');
+        res.status(401).json(errorResponse);
+        return;
+      }
+      const { q: searchTerm, limit } = req.query;
+      if (!searchTerm || typeof searchTerm !== 'string') {
+        const errorResponse = createErrorResponse('Search term is required');
+        res.status(400).json(errorResponse);
+        return;
+      }
+      const suggestions = await this.productService.getProductMasterSuggestions(
+        searchTerm,
+        limit !== undefined ? { limit: parseInt(limit as string) } : undefined
+      );
+      res.status(200).json(createSuccessResponse('Product master suggestions', suggestions));
+    }
+  );
 }

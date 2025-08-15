@@ -662,4 +662,14 @@ export class ProductService {
 
     return sku;
   }
+
+  /**
+   * Get product suggestions from product_master for a given search term.
+   * @param searchTerm - The search query
+   * @param options - Optional: limit (default 5)
+   * @returns Array of suggested master products
+   */
+  async getProductMasterSuggestions(searchTerm: string, options?: { limit?: number }) {
+    return this.productModel.getProductMasterSuggestions(searchTerm, options);
+  }
 }

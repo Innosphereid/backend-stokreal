@@ -84,11 +84,11 @@
   - [x] 5.3 Create product validation middleware
   - [x] 5.4 Create category validation middleware
 
-- [ ] 6.0 Smart Search and Discovery
-  - [ ] 6.1 Implement full-text search across product fields
-  - [ ] 6.2 Integrate with product_master database for suggestions
-  - [ ] 6.3 Add SKU and barcode exact matching
-  - [ ] 6.4 Implement search result ranking by relevance and popularity
+- [x] 6.0 Smart Search and Discovery
+  - [x] 6.1 Implement full-text search across product fields
+  - [x] 6.2 Integrate with product_master database for suggestions
+  - [x] 6.3 Add SKU and barcode exact matching
+  - [x] 6.4 Implement search result ranking by relevance and popularity
 
 - [ ] 7.0 Response Formatting and Resources
   - [ ] 7.1 Create ProductResource for consistent API responses

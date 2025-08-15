@@ -66,6 +66,22 @@ export interface ProductSearchParams {
   order?: 'asc' | 'desc';
 }
 
+export interface ProductMaster {
+  id: string;
+  name: string;
+  brand?: string;
+  category?: string;
+  common_barcodes?: string[];
+  common_units?: string;
+  search_tags?: string[];
+  popularity_score?: number;
+  suggested_selling_price?: number;
+  description?: string;
+  is_verified?: boolean;
+  created_at?: Date;
+  updated_at?: Date;
+}
+
 export class ProductModel extends BaseModel<Product> {
   protected tableName = 'products';
 
@@ -323,7 +339,12 @@ export class ProductModel extends BaseModel<Product> {
   }
 
   /**
-   * Search products with full-text search capabilities
+   * Search products with PostgreSQL full-text search and ranking.
+   * Prioritizes exact SKU/barcode matches, then by relevance, popularity (sales_count), and recency.
+   * @param userId - The user performing the search
+   * @param searchTerm - The search query
+   * @param options - Optional filters (category_id, limit, offset)
+   * @returns Array of matching products, ranked by exact match, relevance, popularity, and recency
    */
   async fullTextSearch(
     userId: string,
@@ -333,41 +354,58 @@ export class ProductModel extends BaseModel<Product> {
       limit?: number;
       offset?: number;
     }
-  ): Promise<Product[]> {
-    let query = this.db(this.tableName).where({ user_id: userId }).whereNull('deleted_at');
+  ): Promise<(Product & { is_exact_match: boolean; rank: number; sales_count: number })[]> {
+    // Build the full-text search vector
+    const vector = `to_tsvector('simple', coalesce(name, '') || ' ' || coalesce(description, '') || ' ' || coalesce(array_to_string(search_tags, ' '), ''))`;
+    const query = `plainto_tsquery('simple', ?)`;
 
-    // Apply category filter if specified
+    let knexQuery = this.db(this.tableName)
+      .select(
+        `${this.tableName}.*`,
+        this.db.raw(`ts_rank(${vector}, ${query}) as rank`, [searchTerm]),
+        this.db.raw(`(sku = ? OR barcode = ?) as is_exact_match`, [searchTerm, searchTerm]),
+        this.db.raw('COALESCE(sales_count, 0) as sales_count')
+      )
+      .leftJoin(
+        this.db('sale_items')
+          .select('product_id')
+          .count('* as sales_count')
+          .groupBy('product_id')
+          .as('sales_agg'),
+        `${this.tableName}.id`,
+        'sales_agg.product_id'
+      )
+      .where({ [`${this.tableName}.user_id`]: userId })
+      .whereNull(`${this.tableName}.deleted_at`);
+
+    // Category filter
     if (options?.category_id) {
-      query = query.where({ category_id: options.category_id });
+      knexQuery = knexQuery.where({ [`${this.tableName}.category_id`]: options.category_id });
     }
 
-    // Apply full-text search using search_tags
-    query = query.whereRaw(
-      `
-      search_tags::text ilike ? OR 
-      name ilike ? OR 
-      description ilike ? OR
-      sku ilike ? OR
-      barcode ilike ?
-    `,
-      [
-        `%${searchTerm}%`,
-        `%${searchTerm}%`,
-        `%${searchTerm}%`,
-        `%${searchTerm}%`,
-        `%${searchTerm}%`,
-      ]
-    );
+    // Full-text search and partial match condition
+    knexQuery = knexQuery.andWhere(builder => {
+      builder
+        .whereRaw(`${vector} @@ ${query}`, [searchTerm])
+        .orWhere(`${this.tableName}.sku`, 'ilike', `%${searchTerm}%`)
+        .orWhere(`${this.tableName}.barcode`, 'ilike', `%${searchTerm}%`);
+    });
 
-    // Apply pagination
+    // Pagination
     if (options?.limit) {
-      query = query.limit(options.limit);
+      knexQuery = knexQuery.limit(options.limit);
     }
     if (options?.offset) {
-      query = query.offset(options.offset);
+      knexQuery = knexQuery.offset(options.offset);
     }
 
-    return await query.orderBy('created_at', 'desc');
+    // Order by exact match, then rank (relevance), then sales_count (popularity), then recency
+    return await knexQuery.orderBy([
+      { column: 'is_exact_match', order: 'desc' },
+      { column: 'rank', order: 'desc' },
+      { column: 'sales_count', order: 'desc' },
+      { column: 'created_at', order: 'desc' },
+    ]);
   }
 
   /**
@@ -409,5 +447,33 @@ export class ProductModel extends BaseModel<Product> {
 
     const product = await query.first();
     return !!product;
+  }
+
+  /**
+   * Suggest products from product_master using full-text search and popularity ranking.
+   * @param searchTerm - The search query
+   * @param options - Optional: limit (default 5)
+   * @returns Array of suggested master products, ranked by relevance and popularity
+   */
+  async getProductMasterSuggestions(
+    searchTerm: string,
+    options?: { limit?: number }
+  ): Promise<ProductMaster[]> {
+    const limit = options?.limit || 5;
+    // Build the full-text search vector for product_master
+    const vector = `to_tsvector('simple', coalesce(name, '') || ' ' || coalesce(description, '') || ' ' || coalesce(array_to_string(search_tags, ' '), ''))`;
+    const query = `plainto_tsquery('simple', ?)`;
+
+    // Query product_master for suggestions
+    const results = await this.db('product_master')
+      .select('*')
+      .select(this.db.raw(`ts_rank(${vector}, ${query}) as rank`, [searchTerm]))
+      .whereRaw(`${vector} @@ ${query}`, [searchTerm])
+      .orderBy([
+        { column: 'rank', order: 'desc' },
+        { column: 'popularity_score', order: 'desc' },
+      ])
+      .limit(limit);
+    return results;
   }
 }
