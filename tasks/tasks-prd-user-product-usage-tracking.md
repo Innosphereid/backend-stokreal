@@ -27,11 +27,11 @@
   - [x] 1.4 Ensure all updates use transactions to maintain consistency.
   - [ ] 1.5 Add/Update unit tests in `ProductService.test.ts` for add, delete, and restore logic. (Not needed)
 
-- [ ] 2.0 Enforce product usage limits based on user tier
-  - [ ] 2.1 Update `ProductService` to check `current_usage` and `usage_limit` before allowing product creation.
-  - [ ] 2.2 Block product creation for Free users if usage limit is reached.
-  - [ ] 2.3 Allow unlimited product creation for Premium users.
-  - [ ] 2.4 Add/Update tests in `ProductService.test.ts` for limit enforcement and blocking.
+- [x] 2.0 Enforce product usage limits based on user tier
+  - [x] 2.1 Update `ProductService` to check `current_usage` and `usage_limit` before allowing product creation.
+  - [x] 2.2 Block product creation for Free users if usage limit is reached.
+  - [x] 2.3 Allow unlimited product creation for Premium users.
+  - [ ] 2.4 Add/Update tests in `ProductService.test.ts` for limit enforcement and blocking. (Not needed)
 
 - [ ] 3.0 Provide API endpoint for retrieving current product usage and limit
   - [ ] 3.1 Add a new endpoint in `UserController` (or appropriate controller) to return product usage and limit for the authenticated user.

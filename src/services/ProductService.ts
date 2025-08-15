@@ -575,33 +575,37 @@ export class ProductService {
       const tierStatus = await this.tierValidationService.getUserTierStatus(userId);
       const currentUsage = await this.getProductsUsed(userId);
       const maxProducts = tierStatus.tier_features.products?.limit;
+      const isPremium = tierStatus.subscription_plan === 'premium';
 
-      // Check if user can create more products
-      if (maxProducts === null || maxProducts === undefined) {
+      // Premium users: always allow creation
+      if (isPremium) {
         return {
           canCreate: true,
           currentTier: tierStatus.subscription_plan,
         };
       }
 
-      if (currentUsage >= maxProducts) {
+      // Free users: enforce limit
+      if (maxProducts !== null && maxProducts !== undefined && currentUsage >= maxProducts) {
         return {
           canCreate: false,
-          reason: `Product limit reached. Maximum ${maxProducts} products allowed for ${tierStatus.subscription_plan} tier.`,
+          reason: `Product limit reached. Maximum ${maxProducts} products allowed for Free tier.`,
           currentTier: tierStatus.subscription_plan,
         };
       }
 
       // Check if approaching limit (80% threshold)
-      const threshold = Math.floor(maxProducts * 0.8);
-      if (currentUsage >= threshold) {
-        const remaining = maxProducts - currentUsage;
-        return {
-          canCreate: true,
-          warning: `You're approaching your product limit. Only ${remaining} products remaining.`,
-          upgradePrompt: `Upgrade to Premium for unlimited products and advanced features.`,
-          currentTier: tierStatus.subscription_plan,
-        };
+      if (maxProducts !== null && maxProducts !== undefined) {
+        const threshold = Math.floor(maxProducts * 0.8);
+        if (currentUsage >= threshold) {
+          const remaining = maxProducts - currentUsage;
+          return {
+            canCreate: true,
+            warning: `You're approaching your product limit. Only ${remaining} products remaining.`,
+            upgradePrompt: `Upgrade to Premium for unlimited products and advanced features.`,
+            currentTier: tierStatus.subscription_plan,
+          };
+        }
       }
 
       return {
@@ -713,8 +717,9 @@ export class ProductService {
     return this.productModel.getProductMasterSuggestions(searchTerm, options);
   }
 
-  // Utility to get real-time products_used
+  // Utility to get real-time products_used from user_tier_features
   private async getProductsUsed(userId: string): Promise<number> {
-    return this.productModel.countActiveProducts(userId);
+    const usage = await this.tierFeatureService.getUserFeatureUsage(userId);
+    return usage['product_slot']?.current ?? 0;
   }
 }
