@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { ProductController } from '@/controllers/ProductController';
 import { authenticateToken } from '@/middleware/jwtMiddleware';
 import { productTierValidationMiddleware } from '@/middleware/productTierValidationMiddleware';
+import { productValidationMiddleware } from '@/middleware/productValidationMiddleware';
 
 const router = Router();
 const productController = new ProductController();
@@ -10,6 +11,7 @@ const productController = new ProductController();
 router.post(
   '/',
   authenticateToken(),
+  productValidationMiddleware('create'),
   productTierValidationMiddleware({ action: 'create' }),
   productController.createProduct
 );
@@ -21,7 +23,12 @@ router.get('/', authenticateToken(), productController.getProducts);
 router.get('/:id', authenticateToken(), productController.getProductById);
 
 // Update product
-router.put('/:id', authenticateToken(), productController.updateProduct);
+router.put(
+  '/:id',
+  authenticateToken(),
+  productValidationMiddleware('update'),
+  productController.updateProduct
+);
 
 // Delete product
 router.delete('/:id', authenticateToken(), productController.deleteProduct);

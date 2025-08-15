@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { CategoryController } from '@/controllers/CategoryController';
 import { authenticateToken } from '@/middleware/jwtMiddleware';
 import { productTierValidationMiddleware } from '@/middleware/productTierValidationMiddleware';
+import { categoryValidationMiddleware } from '@/middleware/categoryValidationMiddleware';
 
 const router = Router();
 const categoryController = new CategoryController();
@@ -10,6 +11,7 @@ const categoryController = new CategoryController();
 router.post(
   '/',
   authenticateToken(),
+  categoryValidationMiddleware('create'),
   productTierValidationMiddleware({ action: 'create' }),
   categoryController.createCategory
 );
@@ -21,7 +23,12 @@ router.get('/', authenticateToken(), categoryController.getCategories);
 router.get('/:id', authenticateToken(), categoryController.getCategoryById);
 
 // Update category
-router.put('/:id', authenticateToken(), categoryController.updateCategory);
+router.put(
+  '/:id',
+  authenticateToken(),
+  categoryValidationMiddleware('update'),
+  categoryController.updateCategory
+);
 
 // Delete category
 router.delete('/:id', authenticateToken(), categoryController.deleteCategory);
