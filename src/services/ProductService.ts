@@ -12,6 +12,8 @@ import { logger } from '../utils/logger';
 import { createError } from '../middleware/errorHandler';
 import { SubscriptionPlan } from '../types';
 import { generateSKU } from '@/utils/skuGenerator';
+import { TierFeatureService } from './TierFeatureService';
+import db from '../config/database';
 
 export interface ProductServiceResponse<T> {
   success: boolean;
@@ -38,12 +40,14 @@ export class ProductService {
   private readonly categoryModel: CategoryModel;
   private readonly tierValidationService: TierValidationService;
   private readonly auditLogService: AuditLogService;
+  private readonly tierFeatureService: TierFeatureService;
 
   constructor() {
     this.productModel = new ProductModel();
     this.categoryModel = new CategoryModel();
     this.tierValidationService = new TierValidationService();
     this.auditLogService = new AuditLogService();
+    this.tierFeatureService = new TierFeatureService();
   }
 
   /**
@@ -53,7 +57,7 @@ export class ProductService {
     userId: string,
     action: string,
     productId: string,
-    details: Record<string, any> = {},
+    details: Record<string, unknown> = {},
     success: boolean = true
   ): Promise<void> {
     try {
@@ -80,94 +84,74 @@ export class ProductService {
     userId: string,
     productData: CreateProductRequest
   ): Promise<ProductCreationResult> {
-    try {
-      // Validate tier limits before creation
-      const tierValidation = await this.validateProductCreation(userId);
-
-      if (!tierValidation.canCreate) {
-        throw createError(tierValidation.reason || 'Product creation limit reached', 403);
-      }
-
-      // Generate SKU if not provided
-      if (!productData.sku) {
-        productData.sku = await this.generateUniqueSKU(userId);
-      }
-
-      // Validate category if provided
-      if (productData.category_id) {
-        const categoryExists = await this.categoryModel.findById(productData.category_id);
-        if (!categoryExists || categoryExists.user_id !== userId) {
-          throw createError('Invalid category ID', 400);
+    return await db.transaction(async trx => {
+      try {
+        // Validate tier limits before creation
+        const tierValidation = await this.validateProductCreation(userId);
+        if (!tierValidation.canCreate) {
+          throw createError(tierValidation.reason || 'Product creation limit reached', 403);
         }
+        // Generate SKU if not provided
+        if (!productData.sku) {
+          productData.sku = await this.generateUniqueSKU(userId);
+        }
+        // Validate category if provided
+        if (productData.category_id) {
+          const categoryExists = await this.categoryModel.findById(productData.category_id);
+          if (!categoryExists || categoryExists.user_id !== userId) {
+            throw createError('Invalid category ID', 400);
+          }
+        }
+        // Create the product
+        const product = await this.productModel.create(
+          {
+            ...productData,
+            user_id: userId,
+            sku: productData.sku || (await this.generateUniqueSKU(userId)),
+            cost_price: productData.cost_price || 0,
+            minimum_stock: productData.minimum_stock || 0,
+            is_active: true,
+          },
+          trx
+        );
+        // Update product usage tracking in user_tier_features (atomic)
+        await this.tierFeatureService.trackFeatureUsage(userId, 'product_slot', 1, true, trx);
+        // Log audit event for product creation (outside transaction)
+        setImmediate(() =>
+          this.logAuditEvent(userId, 'product_created', product.id, {
+            product_data: {
+              name: product.name,
+              sku: product.sku,
+              category_id: product.category_id,
+              current_stock: product.current_stock,
+              selling_price: product.selling_price,
+            },
+            tier_warning: tierValidation.warning,
+            upgrade_prompt: tierValidation.upgradePrompt,
+          })
+        );
+        const result: ProductCreationResult = { product };
+        if (tierValidation.warning) result.tier_warning = tierValidation.warning;
+        if (tierValidation.upgradePrompt) result.upgrade_prompt = tierValidation.upgradePrompt;
+        return result;
+      } catch (error) {
+        // Log audit event for failed product creation (outside transaction)
+        setImmediate(() =>
+          this.logAuditEvent(
+            userId,
+            'product_creation_failed',
+            'failed',
+            {
+              error_message: error instanceof Error ? error.message : 'Unknown error',
+              product_data: productData,
+              failure_reason: 'validation_or_creation_error',
+            },
+            false
+          )
+        );
+        throw error;
       }
-
-      // Create the product
-      const product = await this.productModel.create({
-        ...productData,
-        user_id: userId,
-        sku: productData.sku || (await this.generateUniqueSKU(userId)),
-        cost_price: productData.cost_price || 0,
-        minimum_stock: productData.minimum_stock || 0,
-        is_active: true,
-      });
-
-      // Update tier usage tracking
-      await this.tierValidationService.trackFeatureUsage(userId, 'products', 1);
-
-      // Log audit event for product creation
-      await this.logAuditEvent(userId, 'product_created', product.id, {
-        product_data: {
-          name: product.name,
-          sku: product.sku,
-          category_id: product.category_id,
-          current_stock: product.current_stock,
-          selling_price: product.selling_price,
-        },
-        tier_warning: tierValidation.warning,
-        upgrade_prompt: tierValidation.upgradePrompt,
-      });
-
-      const result: ProductCreationResult = {
-        product,
-      };
-
-      // Add tier warning if approaching limit
-      if (tierValidation.warning) {
-        result.tier_warning = tierValidation.warning;
-      }
-
-      // Add upgrade prompt if close to limit
-      if (tierValidation.upgradePrompt) {
-        result.upgrade_prompt = tierValidation.upgradePrompt;
-      }
-
-      logger.info(`Product created successfully for user ${userId}`, {
-        product_id: product.id,
-        user_id: userId,
-        tier: tierValidation.currentTier,
-      });
-
-      return result;
-    } catch (error) {
-      // Log audit event for failed product creation
-      await this.logAuditEvent(
-        userId,
-        'product_creation_failed',
-        'failed',
-        {
-          error_message: error instanceof Error ? error.message : 'Unknown error',
-          product_data: productData,
-          failure_reason: 'validation_or_creation_error',
-        },
-        false
-      );
-
-      logger.error(`Failed to create product for user ${userId}`, {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        user_id: userId,
-      });
-      throw error;
-    }
+    });
   }
 
   /**
@@ -385,65 +369,55 @@ export class ProductService {
    * Delete a product with tier validation
    */
   async deleteProduct(userId: string, productId: string): Promise<ProductServiceResponse<boolean>> {
-    try {
-      // Check if product exists and belongs to user
-      const existingProduct = await this.productModel.findById(productId);
-      if (!existingProduct) {
-        throw createError('Product not found', 404);
+    return await db.transaction(async trx => {
+      try {
+        // Check if product exists and belongs to user
+        const existingProduct = await this.productModel.findById(productId);
+        if (!existingProduct) {
+          throw createError('Product not found', 404);
+        }
+        if (existingProduct.user_id !== userId) {
+          throw createError('Access denied', 403);
+        }
+        // Soft delete the product
+        await this.productModel.softDelete(productId, trx);
+        // Update product usage tracking in user_tier_features (atomic)
+        await this.tierFeatureService.trackFeatureUsage(userId, 'product_slot', -1, true, trx);
+        // Log audit event for product deletion (outside transaction)
+        setImmediate(() =>
+          this.logAuditEvent(userId, 'product_deleted', productId, {
+            deleted_product_data: {
+              name: existingProduct.name,
+              sku: existingProduct.sku,
+              category_id: existingProduct.category_id,
+              current_stock: existingProduct.current_stock,
+              selling_price: existingProduct.selling_price,
+            },
+            deletion_type: 'soft_delete',
+          })
+        );
+        return {
+          success: true,
+          data: true,
+          message: 'Product deleted successfully',
+        };
+      } catch (error) {
+        // Log audit event for failed product deletion (outside transaction)
+        setImmediate(() =>
+          this.logAuditEvent(
+            userId,
+            'product_deletion_failed',
+            productId,
+            {
+              error_message: error instanceof Error ? error.message : 'Unknown error',
+              failure_reason: 'validation_or_deletion_error',
+            },
+            false
+          )
+        );
+        throw error;
       }
-
-      if (existingProduct.user_id !== userId) {
-        throw createError('Access denied', 403);
-      }
-
-      // Soft delete the product
-      await this.productModel.softDelete(productId);
-
-      // Update tier usage tracking
-      await this.tierValidationService.trackFeatureUsage(userId, 'products', -1);
-
-      // Log audit event for product deletion
-      await this.logAuditEvent(userId, 'product_deleted', productId, {
-        deleted_product_data: {
-          name: existingProduct.name,
-          sku: existingProduct.sku,
-          category_id: existingProduct.category_id,
-          current_stock: existingProduct.current_stock,
-          selling_price: existingProduct.selling_price,
-        },
-        deletion_type: 'soft_delete',
-      });
-
-      logger.info(`Product deleted successfully for user ${userId}`, {
-        product_id: productId,
-        user_id: userId,
-      });
-
-      return {
-        success: true,
-        data: true,
-        message: 'Product deleted successfully',
-      };
-    } catch (error) {
-      // Log audit event for failed product deletion
-      await this.logAuditEvent(
-        userId,
-        'product_deletion_failed',
-        productId,
-        {
-          error_message: error instanceof Error ? error.message : 'Unknown error',
-          failure_reason: 'validation_or_deletion_error',
-        },
-        false
-      );
-
-      logger.error(`Failed to delete product ${productId} for user ${userId}`, {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        user_id: userId,
-        product_id: productId,
-      });
-      throw error;
-    }
+    });
   }
 
   /**
@@ -666,6 +640,67 @@ export class ProductService {
       throw new Error('Unable to generate unique SKU');
     }
     return sku;
+  }
+
+  /**
+   * Restore a soft-deleted product and update usage tracking
+   */
+  async restoreProduct(
+    userId: string,
+    productId: string
+  ): Promise<ProductServiceResponse<Product | null>> {
+    return await db.transaction(async trx => {
+      try {
+        // Check if product exists and belongs to user
+        const existingProduct = await this.productModel.findById(productId);
+        if (!existingProduct) {
+          throw createError('Product not found', 404);
+        }
+        if (existingProduct.user_id !== userId) {
+          throw createError('Access denied', 403);
+        }
+        // Restore the product
+        const restoredProduct = await this.productModel.restore(productId, trx);
+        if (!restoredProduct) {
+          throw createError('Failed to restore product', 500);
+        }
+        // Update product usage tracking in user_tier_features (atomic)
+        await this.tierFeatureService.trackFeatureUsage(userId, 'product_slot', 1, true, trx);
+        // Log audit event for product restoration (outside transaction)
+        setImmediate(() =>
+          this.logAuditEvent(userId, 'product_restored', productId, {
+            restored_product_data: {
+              name: restoredProduct.name,
+              sku: restoredProduct.sku,
+              category_id: restoredProduct.category_id,
+              current_stock: restoredProduct.current_stock,
+              selling_price: restoredProduct.selling_price,
+            },
+            restoration_type: 'soft_restore',
+          })
+        );
+        return {
+          success: true,
+          data: restoredProduct,
+          message: 'Product restored successfully',
+        };
+      } catch (error) {
+        // Log audit event for failed product restoration (outside transaction)
+        setImmediate(() =>
+          this.logAuditEvent(
+            userId,
+            'product_restore_failed',
+            productId,
+            {
+              error_message: error instanceof Error ? error.message : 'Unknown error',
+              failure_reason: 'validation_or_restore_error',
+            },
+            false
+          )
+        );
+        throw error;
+      }
+    });
   }
 
   /**

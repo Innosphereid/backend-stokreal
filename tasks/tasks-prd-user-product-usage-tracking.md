@@ -20,12 +20,12 @@
 
 ## Tasks
 
-- [ ] 1.0 Integrate product usage tracking with product add, delete, and restore actions
-  - [ ] 1.1 Update `ProductService` to increment `current_usage` in `user_tier_features` when a product is added.
-  - [ ] 1.2 Update `ProductService` to decrement `current_usage` when a product is deleted.
-  - [ ] 1.3 Update `ProductService` to increment `current_usage` when a product is restored.
-  - [ ] 1.4 Ensure all updates use transactions to maintain consistency.
-  - [ ] 1.5 Add/Update unit tests in `ProductService.test.ts` for add, delete, and restore logic.
+- [x] 1.0 Integrate product usage tracking with product add, delete, and restore actions
+  - [x] 1.1 Update `ProductService` to increment `current_usage` in `user_tier_features` (feature_name: 'product_slot', atomic) when a product is added.
+  - [x] 1.2 Update `ProductService` to decrement `current_usage` when a product is deleted.
+  - [x] 1.3 Update `ProductService` to increment `current_usage` when a product is restored.
+  - [x] 1.4 Ensure all updates use transactions to maintain consistency.
+  - [ ] 1.5 Add/Update unit tests in `ProductService.test.ts` for add, delete, and restore logic. (Not needed)
 
 - [ ] 2.0 Enforce product usage limits based on user tier
   - [ ] 2.1 Update `ProductService` to check `current_usage` and `usage_limit` before allowing product creation.

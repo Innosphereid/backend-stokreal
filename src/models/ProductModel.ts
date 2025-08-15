@@ -36,6 +36,7 @@ export interface CreateProductRequest {
   minimum_stock?: number;
   search_tags?: string[];
   category_id?: string;
+  is_active?: boolean;
 }
 
 export interface UpdateProductRequest {
@@ -280,19 +281,21 @@ export class ProductModel extends BaseModel<Product> {
   /**
    * Soft delete product (set deleted_at timestamp)
    */
-  async softDelete(productId: string): Promise<Product | null> {
-    return await this.update(productId, { deleted_at: new Date() });
+  async softDelete(productId: string, trx?: any): Promise<Product | null> {
+    const dbOrTrx = trx || this.db;
+    return await this.update(productId, { deleted_at: new Date() }, dbOrTrx);
   }
 
   /**
    * Restore soft deleted product (clear deleted_at timestamp)
    */
-  async restore(productId: string): Promise<Product | null> {
-    return await this.db(this.tableName)
+  async restore(productId: string, trx?: any): Promise<Product | null> {
+    const dbOrTrx = trx || this.db;
+    return await dbOrTrx(this.tableName)
       .where({ id: productId })
       .update({ deleted_at: null, updated_at: new Date() })
       .returning('*')
-      .then(([record]) => record || null);
+      .then(([record]: Product[]) => record || null);
   }
 
   /**
@@ -500,5 +503,30 @@ export class ProductModel extends BaseModel<Product> {
       .whereNull('deleted_at')
       .count<{ count: string }[]>('* as count');
     return parseInt(result[0]?.count || '0', 10);
+  }
+
+  async create(data: CreateProductRequest, trx?: any): Promise<Product> {
+    const dbOrTrx = trx || this.db;
+    const [product] = await dbOrTrx(this.tableName)
+      .insert({
+        ...data,
+        created_at: new Date(),
+        updated_at: new Date(),
+      })
+      .returning('*');
+    return product;
+  }
+
+  async update(
+    productId: string,
+    updateData: Partial<Product>,
+    trx?: any
+  ): Promise<Product | null> {
+    const dbOrTrx = trx || this.db;
+    const [product] = await dbOrTrx(this.tableName)
+      .where({ id: productId })
+      .update({ ...updateData, updated_at: new Date() })
+      .returning('*');
+    return product || null;
   }
 }

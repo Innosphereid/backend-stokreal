@@ -72,13 +72,19 @@ export class TierFeatureService {
     userId: string,
     featureName: string,
     increment: number,
-    atomic: boolean = false
+    atomic: boolean = false,
+    trx?: any
   ): Promise<IncrementResult> {
     try {
       if (atomic) {
-        return await this.tierFeatureModel.incrementUsageAtomic(userId, featureName, increment);
+        return await this.tierFeatureModel.incrementUsageAtomic(
+          userId,
+          featureName,
+          increment,
+          trx
+        );
       } else {
-        return await this.tierFeatureModel.incrementUsage(userId, featureName, increment);
+        return await this.tierFeatureModel.incrementUsage(userId, featureName, increment, trx);
       }
     } catch (error) {
       logger.error(
@@ -272,7 +278,8 @@ export class TierFeatureService {
   async createUserFeatureRecord(
     userId: string,
     featureName: string,
-    usageLimit: number | null
+    usageLimit: number | null,
+    trx?: any
   ): Promise<CreateFeatureRecordResult> {
     try {
       const createData: {
@@ -290,7 +297,7 @@ export class TierFeatureService {
       if (usageLimit !== null) {
         createData.usage_limit = usageLimit;
       }
-      return await this.tierFeatureModel.create(createData);
+      return await this.tierFeatureModel.create(createData, trx);
     } catch (error) {
       logger.error(
         `Failed to create user feature record for user ${userId}, feature ${featureName}:`,

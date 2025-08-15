@@ -42,14 +42,15 @@ export class TierFeatureModel {
   async incrementUsage(
     userId: string,
     featureName: string,
-    increment: number
+    increment: number,
+    trx?: any
   ): Promise<IncrementResult> {
-    const result = await db('user_tier_features')
+    const dbOrTrx = trx || db;
+    const result = await dbOrTrx('user_tier_features')
       .where({ user_id: userId, feature_name: featureName })
       .increment('current_usage', increment)
       .update({ updated_at: db.fn.now() })
       .returning(['current_usage', 'updated_at']);
-
     return {
       current_usage: result[0]?.current_usage || 0,
       updated_at: result[0]?.updated_at || new Date(),
@@ -62,26 +63,32 @@ export class TierFeatureModel {
   async incrementUsageAtomic(
     userId: string,
     featureName: string,
-    increment: number
+    increment: number,
+    trx?: any
   ): Promise<IncrementResult> {
-    return db.transaction(async trx => {
-      const row = await trx('user_tier_features')
+    const run = async (transaction: any) => {
+      const row = await transaction('user_tier_features')
         .where({ user_id: userId, feature_name: featureName })
         .forUpdate()
         .first();
       if (!row) throw new Error('Feature usage record not found');
-
       const newUsage = row.current_usage + increment;
-      await trx('user_tier_features').where({ user_id: userId, feature_name: featureName }).update({
-        current_usage: newUsage,
-        updated_at: db.fn.now(),
-      });
-
+      await transaction('user_tier_features')
+        .where({ user_id: userId, feature_name: featureName })
+        .update({
+          current_usage: newUsage,
+          updated_at: db.fn.now(),
+        });
       return {
         current_usage: newUsage,
         updated_at: new Date(),
       };
-    });
+    };
+    if (trx) {
+      return run(trx);
+    } else {
+      return db.transaction(run);
+    }
   }
 
   /**
@@ -110,14 +117,18 @@ export class TierFeatureModel {
   /**
    * Create a new user_tier_features record.
    */
-  async create(data: {
-    user_id: string;
-    feature_name: string;
-    usage_limit?: number;
-    current_usage?: number;
-    last_reset_at?: Date;
-  }): Promise<CreateFeatureRecordResult> {
-    const result = await db('user_tier_features')
+  async create(
+    data: {
+      user_id: string;
+      feature_name: string;
+      usage_limit?: number;
+      current_usage?: number;
+      last_reset_at?: Date;
+    },
+    trx?: any
+  ): Promise<CreateFeatureRecordResult> {
+    const dbOrTrx = trx || db;
+    const result = await dbOrTrx('user_tier_features')
       .insert({
         ...data,
         current_usage: data.current_usage ?? 0,
@@ -126,7 +137,6 @@ export class TierFeatureModel {
         updated_at: new Date(),
       })
       .returning('*');
-
     return result[0] as CreateFeatureRecordResult;
   }
 }
