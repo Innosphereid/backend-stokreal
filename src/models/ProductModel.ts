@@ -488,4 +488,17 @@ export class ProductModel extends BaseModel<Product> {
       .limit(limit);
     return results;
   }
+
+  /**
+   * Count active (not soft-deleted) products for a user
+   * @param userId - The user ID
+   * @returns Number of products with deleted_at IS NULL
+   */
+  async countActiveProducts(userId: string): Promise<number> {
+    const result = await this.db(this.tableName)
+      .where({ user_id: userId })
+      .whereNull('deleted_at')
+      .count<{ count: string }[]>('* as count');
+    return parseInt(result[0]?.count || '0', 10);
+  }
 }

@@ -194,7 +194,7 @@ export class ProductService {
 
       // Get tier information
       const tierStatus = await this.tierValidationService.getUserTierStatus(userId);
-      const productsUsage = tierStatus.current_usage.products?.current || 0;
+      const productsUsage = await this.getProductsUsed(userId);
       const productsLimit = tierStatus.tier_features.products?.limit || 50;
 
       return {
@@ -262,13 +262,14 @@ export class ProductService {
 
       // Get tier information
       const tierStatus = await this.tierValidationService.getUserTierStatus(userId);
+      const productsUsage = await this.getProductsUsed(userId);
 
       return {
         success: true,
         data: product,
         tier_info: {
           current_tier: tierStatus.subscription_plan,
-          products_used: tierStatus.current_usage.products?.current || 0,
+          products_used: productsUsage,
           products_limit: tierStatus.tier_features.products?.limit || 50,
           categories_used: 0,
           categories_limit: 20,
@@ -470,13 +471,14 @@ export class ProductService {
 
       // Get tier information
       const tierStatus = await this.tierValidationService.getUserTierStatus(userId);
+      const productsUsage = await this.getProductsUsed(userId);
 
       return {
         success: true,
         data: products,
         tier_info: {
           current_tier: tierStatus.subscription_plan,
-          products_used: tierStatus.current_usage.products?.current || 0,
+          products_used: productsUsage,
           products_limit: tierStatus.tier_features.products?.limit || 50,
           categories_used: 0,
           categories_limit: 20,
@@ -539,7 +541,7 @@ export class ProductService {
 
       // Get tier information
       const tierStatus = await this.tierValidationService.getUserTierStatus(userId);
-      const productsUsage = tierStatus.current_usage.products?.current || 0;
+      const productsUsage = await this.getProductsUsed(userId);
       const productsLimit = tierStatus.tier_features.products?.limit || 50;
 
       return {
@@ -597,7 +599,7 @@ export class ProductService {
   }> {
     try {
       const tierStatus = await this.tierValidationService.getUserTierStatus(userId);
-      const currentUsage = tierStatus.current_usage.products?.current || 0;
+      const currentUsage = await this.getProductsUsed(userId);
       const maxProducts = tierStatus.tier_features.products?.limit;
 
       // Check if user can create more products
@@ -674,5 +676,10 @@ export class ProductService {
    */
   async getProductMasterSuggestions(searchTerm: string, options?: { limit?: number }) {
     return this.productModel.getProductMasterSuggestions(searchTerm, options);
+  }
+
+  // Utility to get real-time products_used
+  private async getProductsUsed(userId: string): Promise<number> {
+    return this.productModel.countActiveProducts(userId);
   }
 }
