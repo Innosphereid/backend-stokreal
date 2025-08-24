@@ -94,7 +94,8 @@ export class CategoryValidator {
   static sanitizeCategoryData<T extends Partial<CreateCategoryRequest | UpdateCategoryRequest>>(
     data: T
   ): T {
-    const sanitized: any = { ...data };
+    const sanitized = { ...data } as T;
+
     if (sanitized.name && typeof sanitized.name === 'string') {
       sanitized.name = sanitized.name.trim();
     }
@@ -107,6 +108,7 @@ export class CategoryValidator {
     if (sanitized.parent_id && typeof sanitized.parent_id === 'string') {
       sanitized.parent_id = sanitized.parent_id.trim();
     }
+
     return sanitized;
   }
 }

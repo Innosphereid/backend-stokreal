@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { asyncHandler } from '@/middleware/errorHandler';
 import { createSuccessResponse, createErrorResponse } from '@/utils/response';
 import { UserService } from '@/services/UserService';
-import { CreateUserRequest, UpdateUserRequest, QueryParams } from '@/types';
+import { CreateUserRequest, UpdateUserRequest, QueryParams, FEATURE_NAMES } from '@/types';
 import { AuthenticatedRequest } from '@/types/jwt';
 import { ProfileValidator } from '@/validators/profileValidator';
 import { logger } from '@/utils/logger';
@@ -247,7 +247,7 @@ export class UserController {
         return;
       }
       const usage = await this.tierFeatureService.getUserFeatureUsage(req.user.id);
-      const productSlot = usage['product_slot'] || { current: 0, limit: null };
+      const productSlot = usage[FEATURE_NAMES.PRODUCT_SLOT] || { current: 0, limit: null };
       const response = createSuccessResponse('Product usage retrieved successfully', {
         current_usage: productSlot.current,
         usage_limit: productSlot.limit,

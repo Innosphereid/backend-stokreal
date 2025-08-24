@@ -87,6 +87,25 @@ export class ProductModel extends BaseModel<Product> {
   protected tableName = 'products';
 
   /**
+   * Override findById to filter out deleted products
+   * This prevents operations on deleted products while maintaining
+   * the ability to restore them using findDeletedById
+   */
+  async findById(id: string): Promise<Product | null> {
+    const record = await this.db(this.tableName).where({ id }).whereNull('deleted_at').first();
+    return record || null;
+  }
+
+  /**
+   * Find a deleted product by ID (for restore operations only)
+   * This method allows finding soft-deleted products for restoration
+   */
+  async findDeletedById(id: string): Promise<Product | null> {
+    const record = await this.db(this.tableName).where({ id }).whereNotNull('deleted_at').first();
+    return record || null;
+  }
+
+  /**
    * Apply advanced search functionality for products
    */
   protected applySearch(query: Knex.QueryBuilder, search: string): Knex.QueryBuilder {
@@ -291,6 +310,14 @@ export class ProductModel extends BaseModel<Product> {
    */
   async restore(productId: string, trx?: any): Promise<Product | null> {
     const dbOrTrx = trx || this.db;
+
+    // First check if the product exists and is actually deleted
+    const deletedProduct = await this.findDeletedById(productId);
+    if (!deletedProduct) {
+      throw new Error('Deleted product not found or product is not deleted');
+    }
+
+    // Restore the product
     return await dbOrTrx(this.tableName)
       .where({ id: productId })
       .update({ deleted_at: null, updated_at: new Date() })

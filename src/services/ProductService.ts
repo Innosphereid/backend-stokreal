@@ -10,7 +10,7 @@ import { TierValidationService } from './TierValidationService';
 import { AuditLogService } from './AuditLogService';
 import { logger } from '../utils/logger';
 import { createError } from '../middleware/errorHandler';
-import { SubscriptionPlan } from '../types';
+import { SubscriptionPlan, FEATURE_NAMES } from '../types';
 import { generateSKU } from '@/utils/skuGenerator';
 import { TierFeatureService } from './TierFeatureService';
 import db from '../config/database';
@@ -91,6 +91,17 @@ export class ProductService {
         const isPremium = tierStatus.subscription_plan === 'premium';
         const maxProducts = tierStatus.tier_features.products?.limit;
 
+        // Validate product limits BEFORE creating the product
+        if (!isPremium && maxProducts !== null && maxProducts !== undefined) {
+          const currentUsage = tierStatus.current_usage.products?.current || 0;
+          if (currentUsage >= maxProducts) {
+            throw createError(
+              `Product limit reached. Maximum ${maxProducts} products allowed for Free tier.`,
+              403
+            );
+          }
+        }
+
         // Generate SKU if not provided
         if (!productData.sku) {
           productData.sku = await this.generateUniqueSKU(userId);
@@ -115,27 +126,14 @@ export class ProductService {
           trx
         );
 
-        // Atomically increment product_slot usage and check limit
-        const usageResult = await this.tierFeatureService.trackFeatureUsage(
+        // Atomically increment product_slot usage (validation already done above)
+        await this.tierFeatureService.trackFeatureUsage(
           userId,
-          'product_slot',
+          FEATURE_NAMES.PRODUCT_SLOT,
           1,
           true,
           trx
         );
-        const newUsage = usageResult.current_usage;
-        if (
-          !isPremium &&
-          maxProducts !== null &&
-          maxProducts !== undefined &&
-          newUsage > maxProducts
-        ) {
-          // Rollback: usage exceeded after increment
-          throw createError(
-            `Product limit reached. Maximum ${maxProducts} products allowed for Free tier.`,
-            403
-          );
-        }
 
         // Log audit event for product creation (outside transaction)
         setImmediate(() =>
@@ -400,7 +398,13 @@ export class ProductService {
         // Soft delete the product
         await this.productModel.softDelete(productId, trx);
         // Update product usage tracking in user_tier_features (atomic)
-        await this.tierFeatureService.trackFeatureUsage(userId, 'product_slot', -1, true, trx);
+        await this.tierFeatureService.trackFeatureUsage(
+          userId,
+          FEATURE_NAMES.PRODUCT_SLOT,
+          -1,
+          true,
+          trx
+        );
         // Log audit event for product deletion (outside transaction)
         setImmediate(() =>
           this.logAuditEvent(userId, 'product_deleted', productId, {
@@ -687,7 +691,13 @@ export class ProductService {
           throw createError('Failed to restore product', 500);
         }
         // Update product usage tracking in user_tier_features (atomic)
-        await this.tierFeatureService.trackFeatureUsage(userId, 'product_slot', 1, true, trx);
+        await this.tierFeatureService.trackFeatureUsage(
+          userId,
+          FEATURE_NAMES.PRODUCT_SLOT,
+          1,
+          true,
+          trx
+        );
         // Log audit event for product restoration (outside transaction)
         setImmediate(() =>
           this.logAuditEvent(userId, 'product_restored', productId, {
@@ -738,6 +748,6 @@ export class ProductService {
   // Utility to get real-time products_used from user_tier_features
   private async getProductsUsed(userId: string): Promise<number> {
     const usage = await this.tierFeatureService.getUserFeatureUsage(userId);
-    return usage['product_slot']?.current ?? 0;
+    return usage[FEATURE_NAMES.PRODUCT_SLOT]?.current ?? 0;
   }
 }

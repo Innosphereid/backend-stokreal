@@ -9,7 +9,7 @@ import { TierValidationService } from './TierValidationService';
 import { AuditLogService } from './AuditLogService';
 import { logger } from '../utils/logger';
 import { createError } from '../middleware/errorHandler';
-import { SubscriptionPlan } from '../types';
+import { SubscriptionPlan, FEATURE_NAMES } from '../types';
 
 export interface CategoryServiceResponse<T> {
   success: boolean;
@@ -111,7 +111,7 @@ export class CategoryService {
       const category = await this.categoryModel.create(categoryToCreate);
 
       // Update tier usage tracking
-      await this.tierValidationService.trackFeatureUsage(userId, 'categories', 1);
+      await this.tierValidationService.trackFeatureUsage(userId, FEATURE_NAMES.CATEGORIES, 1);
 
       // Log audit event for category creation
       await this.logAuditEvent(userId, 'category_created', category.id, {
@@ -417,7 +417,7 @@ export class CategoryService {
       await this.categoryModel.softDelete(categoryId);
 
       // Update tier usage tracking
-      await this.tierValidationService.trackFeatureUsage(userId, 'categories', -1);
+      await this.tierValidationService.trackFeatureUsage(userId, FEATURE_NAMES.CATEGORIES, -1);
 
       // Log audit event for category deletion
       await this.logAuditEvent(userId, 'category_deleted', categoryId, {

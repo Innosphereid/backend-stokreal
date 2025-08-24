@@ -148,7 +148,8 @@ export class ProductValidator {
   static sanitizeProductData<T extends Partial<CreateProductRequest | UpdateProductRequest>>(
     data: T
   ): T {
-    const sanitized: any = { ...data };
+    const sanitized = { ...data } as T;
+
     if (sanitized.name && typeof sanitized.name === 'string') {
       sanitized.name = sanitized.name.trim();
     }
@@ -169,6 +170,7 @@ export class ProductValidator {
         typeof tag === 'string' ? tag.trim() : tag
       );
     }
+
     return sanitized;
   }
 }
