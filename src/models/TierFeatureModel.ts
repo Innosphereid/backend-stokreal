@@ -1,13 +1,13 @@
-import db from '../config/database';
+import { db } from '@/config/database';
+import { Knex } from 'knex';
 
-// Database operation result interfaces
 export interface TierFeatureRecord {
   id: string;
   user_id: string;
   feature_name: string;
-  current_usage: number;
   usage_limit: number | null;
-  last_reset_at: Date;
+  current_usage: number;
+  last_reset_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -21,9 +21,9 @@ export interface CreateFeatureRecordResult {
   id: string;
   user_id: string;
   feature_name: string;
-  current_usage: number;
   usage_limit: number | null;
-  last_reset_at: Date;
+  current_usage: number;
+  last_reset_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -32,51 +32,8 @@ export interface ResetCountersResult {
   affectedRows: number;
 }
 
-/**
- * Model for user_tier_features table operations.
- */
 export class TierFeatureModel {
-  /**
-   * Generate user-friendly error messages based on feature name and context
-   */
-  private generateErrorMessage(
-    featureName: string,
-    increment: number,
-    usageLimit: number,
-    context: 'limit_exceeded' | 'below_zero'
-  ): string {
-    // Map feature names to user-friendly display names
-    const featureDisplayNames: Record<string, string> = {
-      product_slot: 'products',
-      categories: 'categories',
-      max_products: 'products',
-      max_categories: 'categories',
-      max_file_upload_size_mb: 'file upload size',
-      max_products_per_import: 'products per import',
-      max_import_history: 'import history records',
-      stock_movement_history_days: 'stock movement history days',
-      notification_history_limit: 'notification history records',
-      notification_check_frequency_hours: 'notification check frequency',
-      dashboard_chart_days: 'dashboard chart days',
-      data_retention_years: 'data retention period',
-    };
-
-    // Get the display name for the feature, or use the feature name itself
-    const displayName = featureDisplayNames[featureName] || featureName.replace(/_/g, ' ');
-
-    if (context === 'limit_exceeded') {
-      if (increment > 0) {
-        return `Limit exceeded. You can add up to ${usageLimit} ${displayName} with your current plan.`;
-      }
-    } else if (context === 'below_zero') {
-      if (increment < 0) {
-        return `Cannot remove more ${displayName}. Current usage would go below 0.`;
-      }
-    }
-
-    // Fallback generic message
-    return `Operation not allowed for ${displayName}.`;
-  }
+  private readonly tableName = 'user_tier_features';
 
   /**
    * Increment feature usage for a user.
@@ -85,7 +42,7 @@ export class TierFeatureModel {
     userId: string,
     featureName: string,
     increment: number,
-    trx?: any
+    trx?: Knex.Transaction
   ): Promise<IncrementResult> {
     const dbOrTrx = trx || db;
     const result = await dbOrTrx('user_tier_features')
@@ -106,9 +63,9 @@ export class TierFeatureModel {
     userId: string,
     featureName: string,
     increment: number,
-    trx?: any
+    trx?: Knex.Transaction
   ): Promise<IncrementResult> {
-    const run = async (transaction: any) => {
+    const run = async (transaction: Knex.Transaction) => {
       const row = await transaction('user_tier_features')
         .where({ user_id: userId, feature_name: featureName })
         .forUpdate()
@@ -185,7 +142,7 @@ export class TierFeatureModel {
       current_usage?: number;
       last_reset_at?: Date;
     },
-    trx?: any
+    trx?: Knex.Transaction
   ): Promise<CreateFeatureRecordResult> {
     const dbOrTrx = trx || db;
     const result = await dbOrTrx('user_tier_features')
@@ -197,6 +154,86 @@ export class TierFeatureModel {
         updated_at: new Date(),
       })
       .returning('*');
-    return result[0] as CreateFeatureRecordResult;
+    return result[0];
+  }
+
+  /**
+   * Update an existing user_tier_features record.
+   */
+  async update(
+    userId: string,
+    featureName: string,
+    data: Partial<Omit<TierFeatureRecord, 'id' | 'user_id' | 'feature_name' | 'created_at'>>,
+    trx?: Knex.Transaction
+  ): Promise<TierFeatureRecord | null> {
+    const dbOrTrx = trx || db;
+    const result = await dbOrTrx('user_tier_features')
+      .where({ user_id: userId, feature_name: featureName })
+      .update({
+        ...data,
+        updated_at: new Date(),
+      })
+      .returning('*');
+    return result[0] || null;
+  }
+
+  /**
+   * Delete a user_tier_features record.
+   */
+  async delete(userId: string, featureName: string, trx?: Knex.Transaction): Promise<boolean> {
+    const dbOrTrx = trx || db;
+    const deletedRows = await dbOrTrx('user_tier_features')
+      .where({ user_id: userId, feature_name: featureName })
+      .del();
+    return deletedRows > 0;
+  }
+
+  /**
+   * Find a specific feature usage record for a user.
+   */
+  async findByUserAndFeature(
+    userId: string,
+    featureName: string,
+    trx?: Knex.Transaction
+  ): Promise<TierFeatureRecord | null> {
+    const dbOrTrx = trx || db;
+    const record = await dbOrTrx('user_tier_features')
+      .where({ user_id: userId, feature_name: featureName })
+      .first();
+    return record || null;
+  }
+
+  /**
+   * Generate user-friendly error messages for feature usage limits.
+   */
+  private generateErrorMessage(
+    featureName: string,
+    increment: number,
+    usageLimit: number,
+    context: 'limit_exceeded' | 'below_zero'
+  ): string {
+    // Map feature names to user-friendly display names
+    const featureDisplayNames: Record<string, string> = {
+      product_slot: 'products',
+      categories: 'categories',
+      max_products: 'products',
+      max_categories: 'categories',
+      max_file_upload_size_mb: 'file upload size',
+      max_products_per_import: 'products per import',
+      max_import_history: 'import history records',
+      stock_movement_history_days: 'stock movement history days',
+      notification_history_limit: 'notification history records',
+      notification_check_frequency_hours: 'notification check frequency',
+      // Add more mappings as needed
+    };
+
+    const displayName = featureDisplayNames[featureName] || featureName.replace(/_/g, ' '); // Fallback
+
+    if (context === 'limit_exceeded') {
+      return `Limit exceeded. You can add up to ${usageLimit} ${displayName} with your current plan.`;
+    } else if (context === 'below_zero') {
+      return `Cannot remove more ${displayName}. Current usage would go below 0.`;
+    }
+    return `An unexpected usage error occurred for ${displayName}.`;
   }
 }

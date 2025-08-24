@@ -77,7 +77,6 @@ export class ProductService {
           {
             ...productData,
             user_id: userId,
-            sku: productData.sku || (await this.generateUniqueSKU(userId)),
             cost_price: productData.cost_price || 0,
             minimum_stock: productData.minimum_stock || 0,
             is_active: true,
