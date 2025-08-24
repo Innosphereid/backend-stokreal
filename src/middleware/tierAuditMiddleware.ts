@@ -11,7 +11,7 @@ export class TierAuditMiddleware {
   private readonly auditLogService: AuditLogService;
 
   constructor() {
-    this.auditLogService = new AuditLogService();
+    this.auditLogService = AuditLogService.getInstance();
   }
 
   /**

@@ -31,7 +31,7 @@ export class AuthService implements AuthServiceInterface {
   constructor() {
     this.userService = new UserService();
     this.loginAttemptService = new LoginAttemptService();
-    this.auditLogService = new AuditLogService();
+    this.auditLogService = AuditLogService.getInstance();
     this.emailVerificationService = new EmailVerificationService();
   }
 

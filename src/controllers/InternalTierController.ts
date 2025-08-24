@@ -24,7 +24,7 @@ export class InternalTierController {
   constructor() {
     this.tierService = new TierService();
     this.tierFeatureService = new TierFeatureService();
-    this.auditLogService = new AuditLogService();
+    this.auditLogService = AuditLogService.getInstance();
   }
 
   /**

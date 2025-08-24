@@ -31,7 +31,7 @@ export async function runDowngradeJobOnce(): Promise<void> {
   const userModel = new UserModel();
   const tierService = new TierService();
   const notificationService = new TierNotificationService();
-  const auditLogService = new AuditLogService();
+  const auditLogService = AuditLogService.getInstance();
 
   try {
     // Find candidate users: premium, with subscription_expires_at not null and expired + grace period ended
@@ -106,7 +106,7 @@ export async function runNotificationJobOnce(): Promise<void> {
   const userModel = new UserModel();
   const tierService = new TierService();
   const notificationService = new TierNotificationService();
-  const auditLogService = new AuditLogService();
+  const auditLogService = AuditLogService.getInstance();
 
   try {
     const db = userModel.getDb();

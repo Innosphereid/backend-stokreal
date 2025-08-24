@@ -29,6 +29,7 @@ import { connectDatabase } from '@/config/database';
 import corsConfig from '@/config/cors';
 import swaggerOptions from '@/config/swagger';
 import { startTierScheduler, stopTierScheduler } from '@/jobs/tierScheduler';
+import { AuditLogService } from '@/services/AuditLogService';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -116,6 +117,7 @@ const startServer = async (): Promise<void> => {
       logger.info(`Health check available at: http://localhost:${PORT}/health`);
       // Start background jobs after server is up
       startTierScheduler();
+      AuditLogService.startService();
     });
   } catch (error) {
     logger.error('Failed to start server:', error);
@@ -139,12 +141,14 @@ process.on('uncaughtException', error => {
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received, shutting down gracefully');
   stopTierScheduler();
+  AuditLogService.stopService();
   process.exit(0);
 });
 
 process.on('SIGINT', () => {
   logger.info('SIGINT received, shutting down gracefully');
   stopTierScheduler();
+  AuditLogService.stopService();
   process.exit(0);
 });
 

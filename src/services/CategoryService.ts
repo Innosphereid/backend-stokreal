@@ -39,7 +39,7 @@ export class CategoryService {
   constructor() {
     this.categoryModel = new CategoryModel();
     this.tierValidationService = new TierValidationService();
-    this.auditLogService = new AuditLogService();
+    this.auditLogService = AuditLogService.getInstance();
   }
 
   /**

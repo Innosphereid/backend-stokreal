@@ -46,7 +46,7 @@ export class ProductService {
     this.productModel = new ProductModel();
     this.categoryModel = new CategoryModel();
     this.tierValidationService = new TierValidationService();
-    this.auditLogService = new AuditLogService();
+    this.auditLogService = AuditLogService.getInstance();
     this.tierFeatureService = new TierFeatureService();
   }
 

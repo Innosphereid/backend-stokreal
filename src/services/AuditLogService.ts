@@ -17,27 +17,117 @@ export class AuditLogService {
   private readonly tableName = 'audit_logs';
   private readonly backgroundQueue: Array<() => Promise<void>> = [];
   private isProcessingQueue = false;
+  private backgroundProcessorHandle: NodeJS.Timeout | null = null;
+  private isRunning = false;
+
+  // Singleton instance
+  private static instance: AuditLogService | null = null;
 
   constructor() {
-    // Start background queue processor
+    // Don't start background processor automatically
+    // Use start() method to explicitly start the service
+  }
+
+  /**
+   * Get singleton instance
+   */
+  public static getInstance(): AuditLogService {
+    if (!AuditLogService.instance) {
+      AuditLogService.instance = new AuditLogService();
+    }
+    return AuditLogService.instance;
+  }
+
+  /**
+   * Start the global audit log service background processor
+   */
+  public static startService(): void {
+    const instance = AuditLogService.getInstance();
+    instance.start();
+  }
+
+  /**
+   * Stop the global audit log service background processor
+   */
+  public static stopService(): void {
+    if (AuditLogService.instance) {
+      AuditLogService.instance.stop();
+    }
+  }
+
+  /**
+   * Check if the global service is currently running
+   */
+  public static isServiceRunning(): boolean {
+    return AuditLogService.instance?.isServiceRunning() ?? false;
+  }
+
+  /**
+   * Start the audit log service background processor
+   */
+  public start(): void {
+    if (this.isRunning) {
+      logger.warn('AuditLogService background processor is already running');
+      return;
+    }
+
+    this.isRunning = true;
     this.startBackgroundProcessor();
+    logger.info('AuditLogService background processor started');
+  }
+
+  /**
+   * Stop the audit log service background processor
+   */
+  public stop(): void {
+    if (!this.isRunning) {
+      logger.warn('AuditLogService background processor is not running');
+      return;
+    }
+
+    this.isRunning = false;
+    this.stopBackgroundProcessor();
+    logger.info('AuditLogService background processor stopped');
+  }
+
+  /**
+   * Check if the service is currently running
+   */
+  public isServiceRunning(): boolean {
+    return this.isRunning;
   }
 
   /**
    * Start background processor for non-critical audit logs
    */
   private startBackgroundProcessor(): void {
+    if (this.backgroundProcessorHandle) {
+      clearInterval(this.backgroundProcessorHandle);
+    }
+
     // Process queue every 100ms to ensure logs are written promptly
-    setInterval(() => {
-      this.processBackgroundQueue();
+    this.backgroundProcessorHandle = setInterval(() => {
+      if (this.isRunning) {
+        this.processBackgroundQueue();
+      }
     }, 100);
+  }
+
+  /**
+   * Stop background processor
+   */
+  private stopBackgroundProcessor(): void {
+    if (this.backgroundProcessorHandle) {
+      clearInterval(this.backgroundProcessorHandle);
+      this.backgroundProcessorHandle = null;
+    }
   }
 
   /**
    * Process background queue
    */
   private async processBackgroundQueue(): Promise<void> {
-    if (this.isProcessingQueue || this.backgroundQueue.length === 0) {
+    if (this.isProcessingQueue || this.backgroundQueue.length === 0 || !this.isRunning) {
       return;
     }
 
