@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { CategoryController } from '@/controllers/CategoryController';
 import { authenticateToken } from '@/middleware/jwtMiddleware';
-import { productTierValidationMiddleware } from '@/middleware/productTierValidationMiddleware';
+
 import { categoryValidationMiddleware } from '@/middleware/categoryValidationMiddleware';
 
 const router = Router();
@@ -129,7 +129,6 @@ router.post(
   '/',
   authenticateToken(),
   categoryValidationMiddleware('create'),
-  productTierValidationMiddleware({ action: 'create' }),
   categoryController.createCategory
 );
 

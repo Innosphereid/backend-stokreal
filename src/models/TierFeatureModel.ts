@@ -37,6 +37,48 @@ export interface ResetCountersResult {
  */
 export class TierFeatureModel {
   /**
+   * Generate user-friendly error messages based on feature name and context
+   */
+  private generateErrorMessage(
+    featureName: string,
+    increment: number,
+    usageLimit: number,
+    context: 'limit_exceeded' | 'below_zero'
+  ): string {
+    // Map feature names to user-friendly display names
+    const featureDisplayNames: Record<string, string> = {
+      product_slot: 'products',
+      categories: 'categories',
+      max_products: 'products',
+      max_categories: 'categories',
+      max_file_upload_size_mb: 'file upload size',
+      max_products_per_import: 'products per import',
+      max_import_history: 'import history records',
+      stock_movement_history_days: 'stock movement history days',
+      notification_history_limit: 'notification history records',
+      notification_check_frequency_hours: 'notification check frequency',
+      dashboard_chart_days: 'dashboard chart days',
+      data_retention_years: 'data retention period',
+    };
+
+    // Get the display name for the feature, or use the feature name itself
+    const displayName = featureDisplayNames[featureName] || featureName.replace(/_/g, ' ');
+
+    if (context === 'limit_exceeded') {
+      if (increment > 0) {
+        return `Limit exceeded. You can add up to ${usageLimit} ${displayName} with your current plan.`;
+      }
+    } else if (context === 'below_zero') {
+      if (increment < 0) {
+        return `Cannot remove more ${displayName}. Current usage would go below 0.`;
+      }
+    }
+
+    // Fallback generic message
+    return `Operation not allowed for ${displayName}.`;
+  }
+
+  /**
    * Increment feature usage for a user.
    */
   async incrementUsage(
@@ -75,20 +117,20 @@ export class TierFeatureModel {
       const newUsage = row.current_usage + increment;
       // Enforce usage limits atomically based on increment direction
       if (increment > 0) {
-        // Creating/adding products: check upper limit
+        // Creating/adding: check upper limit
         if (
           row.usage_limit !== null &&
           typeof row.usage_limit === 'number' &&
           newUsage > row.usage_limit
         ) {
           throw new Error(
-            `Product limit exceeded. You can add up to ${row.usage_limit} products with your current plan.`
+            this.generateErrorMessage(featureName, increment, row.usage_limit, 'limit_exceeded')
           );
         }
       } else if (increment < 0) {
-        // Deleting/removing products: check lower limit (can't go below 0)
+        // Removing: check lower limit (can't go below 0)
         if (newUsage < 0) {
-          throw new Error(`Cannot delete more products. Current usage would go below 0.`);
+          throw new Error(this.generateErrorMessage(featureName, increment, 0, 'below_zero'));
         }
       }
       await transaction('user_tier_features')

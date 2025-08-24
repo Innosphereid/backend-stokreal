@@ -51,33 +51,6 @@ export class ProductService {
   }
 
   /**
-   * Log audit event for product operations
-   */
-  private async logAuditEvent(
-    userId: string,
-    action: string,
-    productId: string,
-    details: Record<string, unknown> = {},
-    success: boolean = true
-  ): Promise<void> {
-    try {
-      await this.auditLogService.log({
-        userId,
-        action,
-        resource: 'product',
-        details: {
-          product_id: productId,
-          ...details,
-        },
-        success,
-      });
-    } catch (error) {
-      logger.error('Failed to log audit event for product operation:', error);
-      // Don't throw error to avoid breaking the main flow
-    }
-  }
-
-  /**
    * Create a new product with tier validation
    */
   async createProduct(
@@ -86,21 +59,7 @@ export class ProductService {
   ): Promise<ProductCreationResult> {
     return await db.transaction(async trx => {
       try {
-        // Get tier info before creation
-        const tierStatus = await this.tierValidationService.getUserTierStatus(userId);
-        const isPremium = tierStatus.subscription_plan === 'premium';
-        const maxProducts = tierStatus.tier_features.products?.limit;
-
-        // Validate product limits BEFORE creating the product
-        if (!isPremium && maxProducts !== null && maxProducts !== undefined) {
-          const currentUsage = tierStatus.current_usage.products?.current || 0;
-          if (currentUsage >= maxProducts) {
-            throw createError(
-              `Product limit reached. Maximum ${maxProducts} products allowed for Free tier.`,
-              403
-            );
-          }
-        }
+        // Note: Product limits are validated atomically in trackFeatureUsage below
 
         // Generate SKU if not provided
         if (!productData.sku) {
@@ -126,7 +85,7 @@ export class ProductService {
           trx
         );
 
-        // Atomically increment product_slot usage (validation already done above)
+        // Atomically increment product_slot usage with built-in limit validation
         await this.tierFeatureService.trackFeatureUsage(
           userId,
           FEATURE_NAMES.PRODUCT_SLOT,
@@ -135,9 +94,13 @@ export class ProductService {
           trx
         );
 
-        // Log audit event for product creation (outside transaction)
-        setImmediate(() =>
-          this.logAuditEvent(userId, 'product_created', product.id, {
+        // Log audit event for product creation (CRITICAL - must be guaranteed)
+        await this.auditLogService.logCritical({
+          userId,
+          action: 'product_created',
+          resource: 'product',
+          details: {
+            product_id: product.id,
             product_data: {
               name: product.name,
               sku: product.sku,
@@ -145,26 +108,25 @@ export class ProductService {
               current_stock: product.current_stock,
               selling_price: product.selling_price,
             },
-            // Optionally add tier warning/upgradePrompt if needed
-          })
-        );
+          },
+          success: true,
+        });
         const result: ProductCreationResult = { product };
         return result;
       } catch (error) {
-        // Log audit event for failed product creation (outside transaction)
-        setImmediate(() =>
-          this.logAuditEvent(
-            userId,
-            'product_creation_failed',
-            'failed',
-            {
-              error_message: error instanceof Error ? error.message : 'Unknown error',
-              product_data: productData,
-              failure_reason: 'validation_or_creation_error',
-            },
-            false
-          )
-        );
+        // Log audit event for failed product creation (CRITICAL - must be guaranteed)
+        await this.auditLogService.logCritical({
+          userId,
+          action: 'product_creation_failed',
+          resource: 'product',
+          details: {
+            product_id: 'failed',
+            error_message: error instanceof Error ? error.message : 'Unknown error',
+            product_data: productData,
+            failure_reason: 'validation_or_creation_error',
+          },
+          success: false,
+        });
         throw error;
       }
     });
@@ -184,12 +146,18 @@ export class ProductService {
         next_cursor,
       } = await this.productModel.findProductsByUser(searchParams);
 
-      // Log audit event for product list read
-      await this.logAuditEvent(userId, 'products_listed', 'multiple', {
-        search_params: searchParams,
-        total_products: total,
-        returned_count: products.length,
-        access_type: 'products_list_read',
+      // Log audit event for product list read (non-critical - background processing)
+      this.auditLogService.logNonCritical({
+        userId,
+        action: 'products_listed',
+        resource: 'product',
+        details: {
+          search_params: searchParams,
+          total_products: total,
+          returned_count: products.length,
+          access_type: 'products_list_read',
+        },
+        success: true,
       });
 
       // Get tier information
@@ -211,18 +179,18 @@ export class ProductService {
         message: 'Products retrieved successfully',
       };
     } catch (error) {
-      // Log audit event for failed products list read
-      await this.logAuditEvent(
+      // Log audit event for failed products list read (non-critical - background processing)
+      this.auditLogService.logNonCritical({
         userId,
-        'products_list_read_failed',
-        'failed',
-        {
+        action: 'products_list_read_failed',
+        resource: 'product',
+        details: {
           error_message: error instanceof Error ? error.message : 'Unknown error',
           search_params: searchParams,
           failure_reason: 'database_or_validation_error',
         },
-        false
-      );
+        success: false,
+      });
 
       logger.error(`Failed to get products for user ${userId}`, {
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -250,14 +218,21 @@ export class ProductService {
         throw createError('Access denied', 403);
       }
 
-      // Log audit event for product read
-      await this.logAuditEvent(userId, 'product_read', productId, {
-        product_data: {
-          name: product.name,
-          sku: product.sku,
-          category_id: product.category_id,
+      // Log audit event for product read (non-critical - background processing)
+      this.auditLogService.logNonCritical({
+        userId,
+        action: 'product_read',
+        resource: 'product',
+        details: {
+          product_id: productId,
+          product_data: {
+            name: product.name,
+            sku: product.sku,
+            category_id: product.category_id,
+          },
+          access_type: 'single_product_read',
         },
-        access_type: 'single_product_read',
+        success: true,
       });
 
       // Get tier information
@@ -276,17 +251,18 @@ export class ProductService {
         },
       };
     } catch (error) {
-      // Log audit event for failed product read
-      await this.logAuditEvent(
+      // Log audit event for failed product read (non-critical - background processing)
+      this.auditLogService.logNonCritical({
         userId,
-        'product_read_failed',
-        productId,
-        {
+        action: 'product_read_failed',
+        resource: 'product',
+        details: {
+          product_id: productId,
           error_message: error instanceof Error ? error.message : 'Unknown error',
           failure_reason: 'access_denied_or_not_found',
         },
-        false
-      );
+        success: false,
+      });
 
       logger.error(`Failed to get product ${productId} for user ${userId}`, {
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -330,23 +306,30 @@ export class ProductService {
         throw createError('Failed to update product', 500);
       }
 
-      // Log audit event for product update
-      await this.logAuditEvent(userId, 'product_updated', productId, {
-        update_data: updateData,
-        previous_data: {
-          name: existingProduct.name,
-          sku: existingProduct.sku,
-          category_id: existingProduct.category_id,
-          current_stock: existingProduct.current_stock,
-          selling_price: existingProduct.selling_price,
+      // Log audit event for product update (CRITICAL - must be guaranteed)
+      await this.auditLogService.logCritical({
+        userId,
+        action: 'product_updated',
+        resource: 'product',
+        details: {
+          product_id: productId,
+          update_data: updateData,
+          previous_data: {
+            name: existingProduct.name,
+            sku: existingProduct.sku,
+            category_id: existingProduct.category_id,
+            current_stock: existingProduct.current_stock,
+            selling_price: existingProduct.selling_price,
+          },
+          updated_data: {
+            name: updatedProduct.name,
+            sku: updatedProduct.sku,
+            category_id: updatedProduct.category_id,
+            current_stock: updatedProduct.current_stock,
+            selling_price: updatedProduct.selling_price,
+          },
         },
-        updated_data: {
-          name: updatedProduct.name,
-          sku: updatedProduct.sku,
-          category_id: updatedProduct.category_id,
-          current_stock: updatedProduct.current_stock,
-          selling_price: updatedProduct.selling_price,
-        },
+        success: true,
       });
 
       logger.info(`Product updated successfully for user ${userId}`, {
@@ -359,18 +342,19 @@ export class ProductService {
         data: updatedProduct,
       };
     } catch (error) {
-      // Log audit event for failed product update
-      await this.logAuditEvent(
+      // Log audit event for failed product update (CRITICAL - must be guaranteed)
+      await this.auditLogService.logCritical({
         userId,
-        'product_update_failed',
-        productId,
-        {
+        action: 'product_update_failed',
+        resource: 'product',
+        details: {
+          product_id: productId,
           error_message: error instanceof Error ? error.message : 'Unknown error',
           update_data: updateData,
           failure_reason: 'validation_or_update_error',
         },
-        false
-      );
+        success: false,
+      });
 
       logger.error(`Failed to update product ${productId} for user ${userId}`, {
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -405,9 +389,13 @@ export class ProductService {
           true,
           trx
         );
-        // Log audit event for product deletion (outside transaction)
-        setImmediate(() =>
-          this.logAuditEvent(userId, 'product_deleted', productId, {
+        // Log audit event for product deletion (CRITICAL - must be guaranteed)
+        await this.auditLogService.logCritical({
+          userId,
+          action: 'product_deleted',
+          resource: 'product',
+          details: {
+            product_id: productId,
             deleted_product_data: {
               name: existingProduct.name,
               sku: existingProduct.sku,
@@ -416,27 +404,27 @@ export class ProductService {
               selling_price: existingProduct.selling_price,
             },
             deletion_type: 'soft_delete',
-          })
-        );
+          },
+          success: true,
+        });
         return {
           success: true,
           data: true,
           message: 'Product deleted successfully',
         };
       } catch (error) {
-        // Log audit event for failed product deletion (outside transaction)
-        setImmediate(() =>
-          this.logAuditEvent(
-            userId,
-            'product_deletion_failed',
-            productId,
-            {
-              error_message: error instanceof Error ? error.message : 'Unknown error',
-              failure_reason: 'validation_or_deletion_error',
-            },
-            false
-          )
-        );
+        // Log audit event for failed product deletion (CRITICAL - must be guaranteed)
+        await this.auditLogService.logCritical({
+          userId,
+          action: 'product_deletion_failed',
+          resource: 'product',
+          details: {
+            product_id: productId,
+            error_message: error instanceof Error ? error.message : 'Unknown error',
+            failure_reason: 'validation_or_deletion_error',
+          },
+          success: false,
+        });
         throw error;
       }
     });
@@ -457,12 +445,18 @@ export class ProductService {
     try {
       const products = await this.productModel.fullTextSearch(userId, searchTerm, options);
 
-      // Log audit event for product search
-      await this.logAuditEvent(userId, 'products_searched', 'search', {
-        search_term: searchTerm,
-        search_options: options,
-        results_count: products.length,
-        access_type: 'product_search',
+      // Log audit event for product search (non-critical - background processing)
+      this.auditLogService.logNonCritical({
+        userId,
+        action: 'products_searched',
+        resource: 'product',
+        details: {
+          search_term: searchTerm,
+          search_options: options,
+          results_count: products.length,
+          access_type: 'product_search',
+        },
+        success: true,
       });
 
       // Get tier information
@@ -482,19 +476,19 @@ export class ProductService {
         message: `Found ${products.length} products matching "${searchTerm}"`,
       };
     } catch (error) {
-      // Log audit event for failed product search
-      await this.logAuditEvent(
+      // Log audit event for failed product search (non-critical - background processing)
+      this.auditLogService.logNonCritical({
         userId,
-        'product_search_failed',
-        'failed',
-        {
+        action: 'product_search_failed',
+        resource: 'product',
+        details: {
           error_message: error instanceof Error ? error.message : 'Unknown error',
           search_term: searchTerm,
           search_options: options,
           failure_reason: 'search_or_database_error',
         },
-        false
-      );
+        success: false,
+      });
 
       logger.error(`Failed to search products for user ${userId}`, {
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -524,15 +518,21 @@ export class ProductService {
     try {
       const stats = await this.productModel.getProductStats(userId);
 
-      // Log audit event for product stats read
-      await this.logAuditEvent(userId, 'product_stats_read', 'stats', {
-        stats_data: {
-          total: stats.total,
-          active: stats.active,
-          lowStock: stats.lowStock,
-          totalValue: stats.totalValue,
+      // Log audit event for product stats read (non-critical - background processing)
+      this.auditLogService.logNonCritical({
+        userId,
+        action: 'product_stats_read',
+        resource: 'product',
+        details: {
+          stats_data: {
+            total: stats.total,
+            active: stats.active,
+            lowStock: stats.lowStock,
+            totalValue: stats.totalValue,
+          },
+          access_type: 'product_stats_read',
         },
-        access_type: 'product_stats_read',
+        success: true,
       });
 
       // Get tier information
@@ -563,87 +563,23 @@ export class ProductService {
         },
       };
     } catch (error) {
-      // Log audit event for failed product stats read
-      await this.logAuditEvent(
+      // Log audit event for failed product stats read (non-critical - background processing)
+      this.auditLogService.logNonCritical({
         userId,
-        'product_stats_read_failed',
-        'failed',
-        {
+        action: 'product_stats_read_failed',
+        resource: 'product',
+        details: {
           error_message: error instanceof Error ? error.message : 'Unknown error',
           failure_reason: 'stats_calculation_or_database_error',
         },
-        false
-      );
+        success: false,
+      });
 
       logger.error(`Failed to get product stats for user ${userId}`, {
         error: error instanceof Error ? error.message : 'Unknown error',
         user_id: userId,
       });
       throw error;
-    }
-  }
-
-  /**
-   * Validate if user can create a product based on tier limits
-   */
-  private async validateProductCreation(userId: string): Promise<{
-    canCreate: boolean;
-    reason?: string;
-    warning?: string;
-    upgradePrompt?: string;
-    currentTier: SubscriptionPlan;
-  }> {
-    try {
-      const tierStatus = await this.tierValidationService.getUserTierStatus(userId);
-      const currentUsage = await this.getProductsUsed(userId);
-      const maxProducts = tierStatus.tier_features.products?.limit;
-      const isPremium = tierStatus.subscription_plan === 'premium';
-
-      // Premium users: always allow creation
-      if (isPremium) {
-        return {
-          canCreate: true,
-          currentTier: tierStatus.subscription_plan,
-        };
-      }
-
-      // Free users: enforce limit
-      if (maxProducts !== null && maxProducts !== undefined && currentUsage >= maxProducts) {
-        return {
-          canCreate: false,
-          reason: `Product limit reached. Maximum ${maxProducts} products allowed for Free tier.`,
-          currentTier: tierStatus.subscription_plan,
-        };
-      }
-
-      // Check if approaching limit (80% threshold)
-      if (maxProducts !== null && maxProducts !== undefined) {
-        const threshold = Math.floor(maxProducts * 0.8);
-        if (currentUsage >= threshold) {
-          const remaining = maxProducts - currentUsage;
-          return {
-            canCreate: true,
-            warning: `You're approaching your product limit. Only ${remaining} products remaining.`,
-            upgradePrompt: `Upgrade to Premium for unlimited products and advanced features.`,
-            currentTier: tierStatus.subscription_plan,
-          };
-        }
-      }
-
-      return {
-        canCreate: true,
-        currentTier: tierStatus.subscription_plan,
-      };
-    } catch (error) {
-      logger.error(`Failed to validate product creation for user ${userId}`, {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        user_id: userId,
-      });
-      // Default to allowing creation if validation fails
-      return {
-        canCreate: true,
-        currentTier: 'free',
-      };
     }
   }
 
@@ -698,9 +634,13 @@ export class ProductService {
           true,
           trx
         );
-        // Log audit event for product restoration (outside transaction)
-        setImmediate(() =>
-          this.logAuditEvent(userId, 'product_restored', productId, {
+        // Log audit event for product restoration (CRITICAL - must be guaranteed)
+        await this.auditLogService.logCritical({
+          userId,
+          action: 'product_restored',
+          resource: 'product',
+          details: {
+            product_id: productId,
             restored_product_data: {
               name: restoredProduct.name,
               sku: restoredProduct.sku,
@@ -709,27 +649,27 @@ export class ProductService {
               selling_price: restoredProduct.selling_price,
             },
             restoration_type: 'soft_restore',
-          })
-        );
+          },
+          success: true,
+        });
         return {
           success: true,
           data: restoredProduct,
           message: 'Product restored successfully',
         };
       } catch (error) {
-        // Log audit event for failed product restoration (outside transaction)
-        setImmediate(() =>
-          this.logAuditEvent(
-            userId,
-            'product_restore_failed',
-            productId,
-            {
-              error_message: error instanceof Error ? error.message : 'Unknown error',
-              failure_reason: 'validation_or_restore_error',
-            },
-            false
-          )
-        );
+        // Log audit event for failed product restoration (CRITICAL - must be guaranteed)
+        await this.auditLogService.logCritical({
+          userId,
+          action: 'product_restore_failed',
+          resource: 'product',
+          details: {
+            product_id: productId,
+            error_message: error instanceof Error ? error.message : 'Unknown error',
+            failure_reason: 'validation_or_restore_error',
+          },
+          success: false,
+        });
         throw error;
       }
     });
