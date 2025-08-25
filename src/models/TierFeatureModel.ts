@@ -1,5 +1,6 @@
 import { db } from '@/config/database';
 import { Knex } from 'knex';
+import { getFeatureDisplayName } from '@/constants/featureDisplayNames';
 
 export interface TierFeatureRecord {
   id: string;
@@ -52,7 +53,7 @@ export class TierFeatureModel {
       .returning(['current_usage', 'updated_at']);
     return {
       current_usage: result[0]?.current_usage || 0,
-      updated_at: result[0]?.updated_at || new Date(),
+      updated_at: result[0]?.updated_at || db.fn.now(),
     };
   }
 
@@ -72,33 +73,21 @@ export class TierFeatureModel {
         .first();
       if (!row) throw new Error('Feature usage record not found');
       const newUsage = row.current_usage + increment;
-      // Enforce usage limits atomically based on increment direction
-      if (increment > 0) {
-        // Creating/adding: check upper limit
-        if (
-          row.usage_limit !== null &&
-          typeof row.usage_limit === 'number' &&
-          newUsage > row.usage_limit
-        ) {
-          throw new Error(
-            this.generateErrorMessage(featureName, increment, row.usage_limit, 'limit_exceeded')
-          );
-        }
-      } else if (increment < 0) {
-        // Removing: check lower limit (can't go below 0)
-        if (newUsage < 0) {
-          throw new Error(this.generateErrorMessage(featureName, increment, 0, 'below_zero'));
-        }
-      }
-      await transaction('user_tier_features')
+
+      // Validate usage limits based on increment direction
+      this.validateUsageLimits(featureName, increment, newUsage, row.usage_limit);
+      const result = await transaction('user_tier_features')
         .where({ user_id: userId, feature_name: featureName })
         .update({
           current_usage: newUsage,
           updated_at: db.fn.now(),
-        });
+        })
+        .returning('*');
+
+      const updatedRecord = result[0];
       return {
         current_usage: newUsage,
-        updated_at: new Date(),
+        updated_at: updatedRecord.updated_at,
       };
     };
     if (trx) {
@@ -149,9 +138,9 @@ export class TierFeatureModel {
       .insert({
         ...data,
         current_usage: data.current_usage ?? 0,
-        last_reset_at: data.last_reset_at ?? new Date(),
-        created_at: new Date(),
-        updated_at: new Date(),
+        last_reset_at: data.last_reset_at ?? db.fn.now(),
+        created_at: db.fn.now(),
+        updated_at: db.fn.now(),
       })
       .returning('*');
     return result[0];
@@ -171,7 +160,7 @@ export class TierFeatureModel {
       .where({ user_id: userId, feature_name: featureName })
       .update({
         ...data,
-        updated_at: new Date(),
+        updated_at: db.fn.now(),
       })
       .returning('*');
     return result[0] || null;
@@ -204,6 +193,35 @@ export class TierFeatureModel {
   }
 
   /**
+   * Validate usage limits based on increment direction.
+   * @param featureName - The name of the feature being validated
+   * @param increment - The increment amount (positive for adding, negative for removing)
+   * @param newUsage - The new usage value after increment
+   * @param usageLimit - The maximum allowed usage limit
+   * @throws Error if usage limits are exceeded
+   */
+  private validateUsageLimits(
+    featureName: string,
+    increment: number,
+    newUsage: number,
+    usageLimit: number | null
+  ): void {
+    if (increment > 0) {
+      // Creating/adding: check upper limit
+      if (usageLimit !== null && typeof usageLimit === 'number' && newUsage > usageLimit) {
+        throw new Error(
+          this.generateErrorMessage(featureName, increment, usageLimit, 'limit_exceeded')
+        );
+      }
+    } else if (increment < 0) {
+      // Removing: check lower limit (can't go below 0)
+      if (newUsage < 0) {
+        throw new Error(this.generateErrorMessage(featureName, increment, 0, 'below_zero'));
+      }
+    }
+  }
+
+  /**
    * Generate user-friendly error messages for feature usage limits.
    */
   private generateErrorMessage(
@@ -212,22 +230,8 @@ export class TierFeatureModel {
     usageLimit: number,
     context: 'limit_exceeded' | 'below_zero'
   ): string {
-    // Map feature names to user-friendly display names
-    const featureDisplayNames: Record<string, string> = {
-      product_slot: 'products',
-      categories: 'categories',
-      max_products: 'products',
-      max_categories: 'categories',
-      max_file_upload_size_mb: 'file upload size',
-      max_products_per_import: 'products per import',
-      max_import_history: 'import history records',
-      stock_movement_history_days: 'stock movement history days',
-      notification_history_limit: 'notification history records',
-      notification_check_frequency_hours: 'notification check frequency',
-      // Add more mappings as needed
-    };
-
-    const displayName = featureDisplayNames[featureName] || featureName.replace(/_/g, ' '); // Fallback
+    // Use centralized feature display names for consistency
+    const displayName = getFeatureDisplayName(featureName);
 
     if (context === 'limit_exceeded') {
       return `Limit exceeded. You can add up to ${usageLimit} ${displayName} with your current plan.`;

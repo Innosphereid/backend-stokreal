@@ -2,8 +2,8 @@ export type SubscriptionPlan = 'free' | 'premium';
 export type UserRole = 'user' | 'admin';
 export type SortOrder = 'asc' | 'desc';
 
-// Re-export feature names from tier types
-export { FEATURE_NAMES, FeatureName } from './tier';
+// Re-export feature names and types from tier types
+export { FEATURE_NAMES, FeatureName, TierStatus } from './tier';
 
 export interface ApiResponse<T = unknown> {
   message: string;

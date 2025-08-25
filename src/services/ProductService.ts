@@ -13,6 +13,7 @@ import { createError } from '../middleware/errorHandler';
 import { SubscriptionPlan, FEATURE_NAMES } from '../types';
 import { generateSKU } from '@/utils/skuGenerator';
 import { TierFeatureService } from './TierFeatureService';
+import { TierStatus } from './TierService';
 import db from '../config/database';
 
 export interface ProductServiceResponse<T> {
@@ -161,7 +162,7 @@ export class ProductService {
 
       // Get tier information
       const tierStatus = await this.tierValidationService.getUserTierStatus(userId);
-      const productsUsage = await this.getProductsUsed(userId);
+      const productsUsage = await this.getProductsUsed(userId, tierStatus);
       const productsLimit = tierStatus.tier_features.products?.limit || 50;
 
       return {
@@ -236,7 +237,7 @@ export class ProductService {
 
       // Get tier information
       const tierStatus = await this.tierValidationService.getUserTierStatus(userId);
-      const productsUsage = await this.getProductsUsed(userId);
+      const productsUsage = await this.getProductsUsed(userId, tierStatus);
 
       return {
         success: true,
@@ -460,7 +461,7 @@ export class ProductService {
 
       // Get tier information
       const tierStatus = await this.tierValidationService.getUserTierStatus(userId);
-      const productsUsage = await this.getProductsUsed(userId);
+      const productsUsage = await this.getProductsUsed(userId, tierStatus);
 
       return {
         success: true,
@@ -536,7 +537,7 @@ export class ProductService {
 
       // Get tier information
       const tierStatus = await this.tierValidationService.getUserTierStatus(userId);
-      const productsUsage = await this.getProductsUsed(userId);
+      const productsUsage = await this.getProductsUsed(userId, tierStatus);
       const productsLimit = tierStatus.tier_features.products?.limit || 50;
 
       return {
@@ -685,7 +686,13 @@ export class ProductService {
   }
 
   // Utility to get real-time products_used from user_tier_features
-  private async getProductsUsed(userId: string): Promise<number> {
+  private async getProductsUsed(userId: string, tierStatus?: TierStatus): Promise<number> {
+    // If tier status is provided and contains product usage, use it to avoid duplicate DB calls
+    if (tierStatus?.current_usage?.[FEATURE_NAMES.PRODUCT_SLOT]?.current !== undefined) {
+      return tierStatus.current_usage[FEATURE_NAMES.PRODUCT_SLOT]!.current;
+    }
+
+    // Fallback to database call if tier status is not provided or doesn't contain usage info
     const usage = await this.tierFeatureService.getUserFeatureUsage(userId);
     return usage[FEATURE_NAMES.PRODUCT_SLOT]?.current ?? 0;
   }
