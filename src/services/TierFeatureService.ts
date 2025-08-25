@@ -1,6 +1,7 @@
-import { TierFeatureModel } from '../models/TierFeatureModel';
-import { TierFeatureDefinitionsModel } from '../models/TierFeatureDefinitionsModel';
-import { logger } from '../utils/logger';
+import { TierFeatureModel } from '@/models/TierFeatureModel';
+import { TierFeatureDefinitionsModel } from '@/models/TierFeatureDefinitionsModel';
+import { logger } from '@/utils/logger';
+import { Knex } from 'knex';
 
 export interface FeatureUsage {
   current: number;
@@ -24,33 +25,8 @@ export interface UsageThresholdResult {
   warning_message: string | null;
 }
 
-// Database operation result interfaces
-export interface TierFeatureRecord {
-  id: string;
-  user_id: string;
-  feature_name: string;
-  current_usage: number;
-  usage_limit: number | null;
-  last_reset_at: Date;
-  created_at: Date;
-  updated_at: Date;
-}
-
-export interface IncrementResult {
-  current_usage: number;
-  updated_at: Date;
-}
-
-export interface CreateFeatureRecordResult {
-  id: string;
-  user_id: string;
-  feature_name: string;
-  current_usage: number;
-  usage_limit: number | null;
-  last_reset_at: Date;
-  created_at: Date;
-  updated_at: Date;
-}
+// Import types from the model to avoid duplication
+import type { IncrementResult, CreateFeatureRecordResult } from '@/models/TierFeatureModel';
 
 export interface ResetCountersResult {
   affectedRows: number;
@@ -72,14 +48,25 @@ export class TierFeatureService {
     userId: string,
     featureName: string,
     increment: number,
-    atomic: boolean = false
+    atomic: boolean = false,
+    trx?: Knex.Transaction
   ): Promise<IncrementResult> {
     try {
+      let result: IncrementResult;
       if (atomic) {
-        return await this.tierFeatureModel.incrementUsageAtomic(userId, featureName, increment);
+        result = await this.tierFeatureModel.incrementUsageAtomic(
+          userId,
+          featureName,
+          increment,
+          trx
+        );
       } else {
-        return await this.tierFeatureModel.incrementUsage(userId, featureName, increment);
+        result = await this.tierFeatureModel.incrementUsage(userId, featureName, increment, trx);
       }
+      logger.info(
+        `Feature usage updated: user_id=${userId}, feature=${featureName}, increment=${increment}, new_current_usage=${result.current_usage}`
+      );
+      return result;
     } catch (error) {
       logger.error(
         `Failed to track feature usage for user ${userId}, feature ${featureName}:`,
@@ -272,7 +259,8 @@ export class TierFeatureService {
   async createUserFeatureRecord(
     userId: string,
     featureName: string,
-    usageLimit: number | null
+    usageLimit: number | null,
+    trx?: Knex.Transaction
   ): Promise<CreateFeatureRecordResult> {
     try {
       const createData: {
@@ -290,10 +278,226 @@ export class TierFeatureService {
       if (usageLimit !== null) {
         createData.usage_limit = usageLimit;
       }
-      return await this.tierFeatureModel.create(createData);
+      return await this.tierFeatureModel.create(createData, trx);
     } catch (error) {
       logger.error(
         `Failed to create user feature record for user ${userId}, feature ${featureName}:`,
+        error
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Create a new feature usage record for a user
+   */
+  async createFeatureUsage(
+    userId: string,
+    featureName: string,
+    usageLimit?: number,
+    trx?: Knex.Transaction
+  ): Promise<void> {
+    try {
+      const createData: {
+        user_id: string;
+        feature_name: string;
+        current_usage: number;
+        usage_limit?: number;
+      } = {
+        user_id: userId,
+        feature_name: featureName,
+        current_usage: 0,
+      };
+
+      // Only add usage_limit if it's defined
+      if (usageLimit !== undefined) {
+        createData.usage_limit = usageLimit;
+      }
+
+      await this.tierFeatureModel.create(createData, trx);
+      logger.info(`Created feature usage record for user ${userId}, feature ${featureName}`);
+    } catch (error) {
+      logger.error(
+        `Failed to create feature usage record for user ${userId}, feature ${featureName}:`,
+        error
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Update feature usage limits for a user
+   */
+  async updateFeatureUsageLimit(
+    userId: string,
+    featureName: string,
+    newLimit: number | null,
+    trx?: Knex.Transaction
+  ): Promise<void> {
+    try {
+      await this.tierFeatureModel.update(userId, featureName, { usage_limit: newLimit }, trx);
+      logger.info(
+        `Updated feature usage limit for user ${userId}, feature ${featureName} to ${newLimit}`
+      );
+    } catch (error) {
+      logger.error(
+        `Failed to update feature usage limit for user ${userId}, feature ${featureName}:`,
+        error
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Reset feature usage counter for a user
+   */
+  async resetFeatureUsage(
+    userId: string,
+    featureName: string,
+    trx?: Knex.Transaction
+  ): Promise<void> {
+    try {
+      await this.tierFeatureModel.update(
+        userId,
+        featureName,
+        { current_usage: 0, last_reset_at: new Date() },
+        trx
+      );
+      logger.info(`Reset feature usage for user ${userId}, feature ${featureName}`);
+    } catch (error) {
+      logger.error(
+        `Failed to reset feature usage for user ${userId}, feature ${featureName}:`,
+        error
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Get feature usage statistics for a user
+   */
+  async getFeatureUsageStats(userId: string): Promise<{
+    total_features: number;
+    features_with_limits: number;
+    features_at_limit: number;
+    features_available: number;
+  }> {
+    try {
+      const userFeatureUsageArr = await this.tierFeatureModel.getUserFeatureUsage(userId);
+      const totalFeatures = userFeatureUsageArr.length;
+      let featuresWithLimits = 0;
+      let featuresAtLimit = 0;
+      let featuresAvailable = 0;
+
+      for (const feature of userFeatureUsageArr) {
+        if (feature.usage_limit !== null) {
+          featuresWithLimits++;
+          if (feature.current_usage >= feature.usage_limit) {
+            featuresAtLimit++;
+          } else {
+            featuresAvailable++;
+          }
+        } else {
+          featuresAvailable++;
+        }
+      }
+
+      return {
+        total_features: totalFeatures,
+        features_with_limits: featuresWithLimits,
+        features_at_limit: featuresAtLimit,
+        features_available: featuresAvailable,
+      };
+    } catch (error) {
+      logger.error(`Failed to get feature usage stats for user ${userId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if a user has exceeded any feature limits
+   */
+  async checkFeatureLimitViolations(userId: string): Promise<{
+    has_violations: boolean;
+    violations: Array<{
+      feature_name: string;
+      current_usage: number;
+      limit: number;
+    }>;
+  }> {
+    try {
+      const userFeatureUsageArr = await this.tierFeatureModel.getUserFeatureUsage(userId);
+      const violations: Array<{
+        feature_name: string;
+        current_usage: number;
+        limit: number;
+      }> = [];
+
+      for (const feature of userFeatureUsageArr) {
+        if (feature.usage_limit !== null && feature.current_usage > feature.usage_limit) {
+          violations.push({
+            feature_name: feature.feature_name,
+            current_usage: feature.current_usage,
+            limit: feature.usage_limit,
+          });
+        }
+      }
+
+      return {
+        has_violations: violations.length > 0,
+        violations,
+      };
+    } catch (error) {
+      logger.error(`Failed to check feature limit violations for user ${userId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get feature usage history for a user
+   */
+  async getFeatureUsageHistory(
+    userId: string,
+    featureName: string,
+    days: number = 30
+  ): Promise<
+    Array<{
+      date: string;
+      usage: number;
+      limit: number | null;
+    }>
+  > {
+    try {
+      // This is a simplified implementation
+      // In a real application, you might want to track daily usage changes
+      const currentUsage = await this.tierFeatureModel.findByUserAndFeature(userId, featureName);
+
+      if (!currentUsage) {
+        return [];
+      }
+
+      // For now, return current usage for the specified number of days
+      // In a production system, you'd want to track actual historical changes
+      const history = [];
+      const today = new Date();
+
+      for (let i = 0; i < days; i++) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+        const dateString = date.toISOString().split('T')[0];
+        if (dateString) {
+          history.push({
+            date: dateString,
+            usage: currentUsage.current_usage,
+            limit: currentUsage.usage_limit,
+          });
+        }
+      }
+
+      return history.reverse();
+    } catch (error) {
+      logger.error(
+        `Failed to get feature usage history for user ${userId}, feature ${featureName}:`,
         error
       );
       throw error;

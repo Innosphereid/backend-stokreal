@@ -10,6 +10,7 @@ import {
   UsageMetric,
 } from '@/types/tier';
 import { SubscriptionPlan } from '@/types';
+import { FEATURE_DISPLAY_NAMES } from '@/constants/featureDisplayNames';
 
 /**
  * Tier Resource - Formats tier-related data for API responses
@@ -275,23 +276,10 @@ export class TierResource {
 
   /**
    * Get feature display names for better user experience
+   * @deprecated Use FEATURE_DISPLAY_NAMES from constants instead
    */
   static getFeatureDisplayNames(): Record<string, string> {
-    return {
-      products: 'Product Management',
-      api_calls: 'API Calls',
-      storage: 'Storage',
-      notifications: 'Notifications',
-      analytics: 'Analytics',
-      export_data: 'Data Export',
-      file_upload: 'File Upload',
-      priority_support: 'Priority Support',
-      advanced_search: 'Advanced Search',
-      bulk_operations: 'Bulk Operations',
-      custom_reports: 'Custom Reports',
-      webhooks: 'Webhooks',
-      integrations: 'Third-party Integrations',
-    };
+    return FEATURE_DISPLAY_NAMES;
   }
 
   /**

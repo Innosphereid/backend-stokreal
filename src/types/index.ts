@@ -2,6 +2,9 @@ export type SubscriptionPlan = 'free' | 'premium';
 export type UserRole = 'user' | 'admin';
 export type SortOrder = 'asc' | 'desc';
 
+// Re-export feature names and types from tier types
+export { FEATURE_NAMES, FeatureName, TierStatus } from './tier';
+
 export interface ApiResponse<T = unknown> {
   message: string;
   data?: T;
@@ -9,12 +12,13 @@ export interface ApiResponse<T = unknown> {
 }
 
 export interface PaginationMeta {
-  page: number;
+  page?: number;
   limit: number;
-  total: number;
-  totalPages: number;
-  hasNext: boolean;
-  hasPrev: boolean;
+  total?: number;
+  totalPages?: number;
+  hasNext?: boolean;
+  hasPrev?: boolean;
+  next_cursor?: string;
 }
 
 export interface PaginatedResponse<T = unknown> extends ApiResponse<T> {

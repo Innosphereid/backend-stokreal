@@ -5,6 +5,8 @@ import corsRoutes from './cors';
 import authRoutes from './auth';
 import adminRoutes from './admin';
 import tierRoutes from './tier';
+import productRoutes from './products';
+import categoryRoutes from './categories';
 
 const router = Router();
 
@@ -15,6 +17,8 @@ router.use('/admin', adminRoutes);
 router.use('/cookies', cookieRoutes);
 router.use('/cors', corsRoutes);
 router.use('/tier', tierRoutes);
+router.use('/products', productRoutes);
+router.use('/categories', categoryRoutes);
 
 /**
  * @swagger
@@ -46,12 +50,21 @@ router.use('/tier', tierRoutes);
  *                     users:
  *                       type: string
  *                       example: "/users"
+ *                     admin:
+ *                       type: string
+ *                       example: "/admin"
  *                     cookies:
  *                       type: string
  *                       example: "/cookies"
  *                     cors:
  *                       type: string
  *                       example: "/cors"
+ *                     products:
+ *                       type: string
+ *                       example: "/products"
+ *                     categories:
+ *                       type: string
+ *                       example: "/categories"
  *                     health:
  *                       type: string
  *                       example: "/health"
@@ -67,6 +80,8 @@ router.use('/tier', tierRoutes);
  *                 admin: "/admin"
  *                 cookies: "/cookies"
  *                 cors: "/cors"
+ *                 products: "/products"
+ *                 categories: "/categories"
  *                 health: "/health"
  *               documentation: "/api-docs"
  */
@@ -80,6 +95,8 @@ router.get('/', (req, res) => {
       admin: '/admin',
       cookies: '/cookies',
       cors: '/cors',
+      products: '/products',
+      categories: '/categories',
       tier_management: '/tier/user/tier-status',
       feature_availability: '/tier/user/feature-availability',
       usage_stats: '/tier/user/usage-stats',

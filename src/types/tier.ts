@@ -1,5 +1,47 @@
 import { SubscriptionPlan } from './index';
 
+// Feature Name Constants
+// Centralized definition of all feature names used throughout the codebase
+// This prevents magic strings and provides a single source of truth
+export const FEATURE_NAMES = {
+  // Product-related features
+  PRODUCT_SLOT: 'product_slot',
+
+  // Category-related features
+  CATEGORIES: 'categories',
+
+  // Tier limit features
+  MAX_PRODUCTS: 'max_products',
+  MAX_CATEGORIES: 'max_categories',
+  MAX_FILE_UPLOAD_SIZE_MB: 'max_file_upload_size_mb',
+  MAX_PRODUCTS_PER_IMPORT: 'max_products_per_import',
+  MAX_IMPORT_HISTORY: 'max_import_history',
+  STOCK_MOVEMENT_HISTORY_DAYS: 'stock_movement_history_days',
+  NOTIFICATION_HISTORY_LIMIT: 'notification_history_limit',
+  NOTIFICATION_CHECK_FREQUENCY_HOURS: 'notification_check_frequency_hours',
+  DASHBOARD_CHART_DAYS: 'dashboard_chart_days',
+  DATA_RETENTION_YEARS: 'data_retention_years',
+
+  // Premium features
+  ANALYTICS_ACCESS: 'analytics_access',
+  EXPORT_CAPABILITIES: 'export_capabilities',
+  PRIORITY_SUPPORT: 'priority_support',
+  BULK_OPERATIONS: 'bulk_operations',
+  CUSTOM_NOTIFICATION_SCHEDULES: 'custom_notification_schedules',
+  ADVANCED_MESSAGE_TEMPLATES: 'advanced_message_templates',
+  MULTIPLE_WHATSAPP_NUMBERS: 'multiple_whatsapp_numbers',
+  SCHEDULED_REPORTS: 'scheduled_reports',
+  ADVANCED_AUDIT_TRAIL: 'advanced_audit_trail',
+  STOCK_ACCURACY_ANALYSIS: 'stock_accuracy_analysis',
+  MOVEMENT_DATA_EXPORT: 'movement_data_export',
+  ADVANCED_SALES_ANALYTICS: 'advanced_sales_analytics',
+  PRODUCT_PERFORMANCE_INSIGHTS: 'product_performance_insights',
+  PRIORITY_SMS_DELIVERY: 'priority_sms_delivery',
+} as const;
+
+// Type for feature names to ensure type safety
+export type FeatureName = (typeof FEATURE_NAMES)[keyof typeof FEATURE_NAMES];
+
 // Tier Status Interface
 export interface TierStatus {
   user_id: string;
